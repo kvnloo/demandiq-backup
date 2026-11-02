@@ -1,5 +1,7 @@
 import { useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
+import { Sun, Moon } from 'lucide-react'
+import { getStoredTheme, applyTheme, otherTheme } from '../lib/theme'
 import { subscribe, getSnapshot, clearProject } from '../store/projectStore'
 // Pulled in so the confirm modal + buttons are styled even on routes (e.g. S1)
 // whose own modules don't import these sheets.
@@ -9,6 +11,8 @@ import '../styles/map.css'
 export default function TopBar() {
   const snap = useSyncExternalStore(subscribe, getSnapshot, () => ({}))
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [theme, setTheme] = useState(getStoredTheme)
+  const isDay = theme === 'signal-flow-day'
 
   const name = snap.project?.name?.trim()
   const count = (snap.intersections || []).length
@@ -41,7 +45,17 @@ export default function TopBar() {
 
       <button
         type="button"
-        className="di-btn-secondary di-toplink"
+        className="di-theme-btn di-toplink"
+        onClick={() => setTheme(applyTheme(otherTheme(theme)))}
+        aria-label={isDay ? 'Switch to dark theme' : 'Switch to day theme'}
+        title={isDay ? 'Dark theme' : 'Day theme (for daylight and printing)'}
+      >
+        {isDay ? <Moon size={16} /> : <Sun size={16} />}
+      </button>
+
+      <button
+        type="button"
+        className="di-btn-secondary"
         style={{ height: 32, padding: '0 14px', fontSize: 13 }}
         onClick={() => setConfirmOpen(true)}
       >

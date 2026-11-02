@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import { Upload, AlertTriangle, X, ClipboardPaste } from 'lucide-react'
 
 import {
@@ -61,11 +62,6 @@ export default function S4_VolumeEntry() {
 
   // ── Empty / un-configured guard ─────────────────────────────────────
   const needsConfig = intersections.length === 0 || !hasAnyApproaches(intersections)
-  useEffect(() => {
-    if (!needsConfig) return
-    const t = setTimeout(() => navigate('/approaches'), 1000)
-    return () => clearTimeout(t)
-  }, [needsConfig, navigate])
 
   // ── Files + extraction ──────────────────────────────────────────────
   const [files, setFiles] = useState([])
@@ -213,14 +209,7 @@ export default function S4_VolumeEntry() {
   }
 
   if (needsConfig) {
-    return (
-      <div className="di-s4 di-s4--center">
-        <div className="di-s4-empty">
-          <div className="di-banner">Configure approaches first.</div>
-          <p className="di-s3-empty__sub">Redirecting…</p>
-        </div>
-      </div>
-    )
+    return <NeedsStep title="Configure approaches first" body="Volume entry builds its grid from each approach’s lanes." to="/approaches" label="Go to Approach Config" />
   }
 
   const canContinue = hasAnyVolumes(intersections)

@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getProjectMeta, setProjectMeta } from '../store/projectStore'
-import { THEMES, getStoredTheme, applyTheme } from '../lib/theme'
-import ThemePickerModal from '../components/ThemePickerModal'
 import SignalFlowHero from '../lib/signal-flow/SignalFlowHero'
 import '../styles/forms.css'
 
@@ -62,10 +60,8 @@ export default function S1_ProjectSetup() {
   // Appearance is a global, per-device preference — NOT project data — so it
   // lives outside `form`/projectStore. The modal applies it live; we mirror the
   // applied id here only to highlight the right card and the trigger swatch.
-  const [theme, setTheme] = useState(getStoredTheme)
-  const [themeOpen, setThemeOpen] = useState(false)
-  const activeTheme = THEMES.find((t) => t.id === theme) ?? THEMES[0]
-  const chooseTheme = (id) => setTheme(applyTheme(id))
+  // Read once: re-deriving it per keystroke would fold the section shut when a field is cleared.
+  const [moreOpen] = useState(() => Boolean(form.projectNumber?.trim() || form.checker?.trim()))
 
   const update = (key, value) => setForm((f) => ({ ...f, [key]: value }))
 
@@ -135,21 +131,16 @@ export default function S1_ProjectSetup() {
       />
 
       <div className="di-form">
-        <div className="di-row">
-          {textField('Project Name', 'name', true, { placeholder: 'e.g. Main Street Corridor Study' })}
-          {textField('Project Number', 'projectNumber', false, { placeholder: '30901249.003' })}
-        </div>
+        {textField('Project Name', 'name', true, { placeholder: 'e.g. Main Street Corridor Study' })}
 
-        {textField('Client / Agency', 'client', true, { placeholder: 'e.g. City of Austin' })}
+        <div className="di-row">
+          {textField('Client / Agency', 'client', true, { placeholder: 'e.g. City of Austin' })}
+          {textField('Scenario Name', 'scenario', true, { placeholder: 'Existing' })}
+        </div>
 
         <div className="di-row">
           {textField('Analyst Initials', 'analyst', true, { placeholder: 'AK' })}
-          {textField('Checker Initials', 'checker', false, { placeholder: 'JS' })}
-        </div>
-
-        <div className="di-row">
           {textField('Date', 'date', true, { type: 'date' })}
-          {textField('Scenario Name', 'scenario', true, { placeholder: 'Existing' })}
         </div>
 
         <div className="di-field">
@@ -207,31 +198,14 @@ export default function S1_ProjectSetup() {
           )}
         </div>
 
-        <div className="di-field">
-          <label className="di-label">Appearance</label>
-          <button
-            type="button"
-            className="di-appearance-trigger"
-            onClick={() => setThemeOpen(true)}
-          >
-            <span
-              className="di-theme-card__swatch di-theme-card__swatch--sm"
-              aria-hidden="true"
-              style={{ background: activeTheme.swatch.bg }}
-            >
-              <span
-                className="di-theme-card__surface"
-                style={{ background: activeTheme.swatch.surface }}
-              />
-              <span
-                className="di-theme-card__accent"
-                style={{ background: activeTheme.swatch.accent }}
-              />
-            </span>
-            <span className="di-appearance-trigger__label">{activeTheme.label}</span>
-            <span className="di-appearance-trigger__action">Change</span>
-          </button>
-        </div>
+        {/* Optional fields: folded away, but open if a saved project already uses them. */}
+        <details className="di-more" open={moreOpen || undefined}>
+          <summary>More details <span>project number, checker</span></summary>
+          <div className="di-row">
+            {textField('Project Number', 'projectNumber', false, { placeholder: '30901249.003' })}
+            {textField('Checker Initials', 'checker', false, { placeholder: 'JS' })}
+          </div>
+        </details>
 
         <div className="di-actions di-actions--validated">
           {attempted && !isValid && (
@@ -245,13 +219,6 @@ export default function S1_ProjectSetup() {
           </button>
         </div>
       </div>
-
-      <ThemePickerModal
-        open={themeOpen}
-        value={theme}
-        onSelect={chooseTheme}
-        onClose={() => setThemeOpen(false)}
-      />
     </form>
   )
 }

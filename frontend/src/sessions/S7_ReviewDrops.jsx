@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import { RotateCcw, Download, AlertTriangle } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 
@@ -148,11 +149,6 @@ export default function S7_ReviewDrops() {
   )
 
   const needsRun = !lastRun || !lastRun.method
-  useEffect(() => {
-    if (!needsRun) return
-    const t = setTimeout(() => navigate('/analysis'), 1000)
-    return () => clearTimeout(t)
-  }, [needsRun, navigate])
 
   const balancedByPeriod = useMemo(() => {
     const out = { AM: {}, PM: {} }
@@ -298,14 +294,7 @@ export default function S7_ReviewDrops() {
   }
 
   if (needsRun) {
-    return (
-      <div className="di-s7r di-s7r--center">
-        <div className="di-s7r-empty">
-          <div className="di-banner">Run analysis first.</div>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>Redirecting…</p>
-        </div>
-      </div>
-    )
+    return <NeedsStep title="Run the analysis first" to="/analysis" label="Go to Run Analysis" />
   }
 
   const totalOverrides =

@@ -95,12 +95,12 @@
   transition: background 120ms, border-color 120ms, color 120ms;
 }
 .di-s7r__chip:hover { background: var(--bg-hover); border-color: var(--accent); }
-.di-s7r__chip--on {
-  background: var(--accent);
-  color: #FFFFFF;
-  border-color: var(--accent);
+.di-s7r__chip--on,
+.di-s7r__chip--on:hover {
+  background: var(--sel-bg);
+  color: var(--fg);
+  border-color: var(--sel-ring);
 }
-.di-s7r__chip--on:hover { background: var(--accent); border-color: var(--accent); }
 
 /* Panel container */
 .di-s7r__panel {

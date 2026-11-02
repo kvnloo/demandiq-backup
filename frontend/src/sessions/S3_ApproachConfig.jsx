@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 
 import {
@@ -31,12 +32,6 @@ export default function S3_ApproachConfig() {
   const intersections = snap.intersections || []
   const corridorDir = snap.analysis?.corridorDir ?? 'EW'
 
-  // ── Empty-state redirect to S2 ──────────────────────────────────────
-  useEffect(() => {
-    if (intersections.length > 0) return
-    const t = setTimeout(() => navigate('/map'), 1000)
-    return () => clearTimeout(t)
-  }, [intersections.length, navigate])
 
   // ── Default-fill approaches once on mount ───────────────────────────
   const didInit = useRef(false)
@@ -63,14 +58,7 @@ export default function S3_ApproachConfig() {
   const [picker, setPicker] = useState(null)
 
   if (intersections.length === 0) {
-    return (
-      <div className="di-s3 di-s3--center">
-        <div className="di-s3-empty">
-          <div className="di-banner">Add intersections first.</div>
-          <p className="di-s3-empty__sub">Redirecting to the map…</p>
-        </div>
-      </div>
-    )
+    return <NeedsStep title="Add intersections first" body="Approach config needs at least one intersection on the map." to="/map" label="Go to Map" />
   }
 
   const active = intersections.find((it) => it.id === activeId) ?? intersections[0]

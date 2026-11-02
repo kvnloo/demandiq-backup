@@ -1,7 +1,13 @@
 /* App shell copied from CrashIQ (frontend/src/styles/app.css) so the two tools
    look like one product: header bar, left step rail with lamp numbers, one stage.
    di- prefixed so it never collides with screen styles. */
-:root { --di-rail: 232px; --di-top: 56px; }
+:root {
+  --di-rail: 232px; --di-top: 56px;
+  /* "Selected" for toggles and pills: a quiet outline, so blue stays for links
+     and green stays for go. */
+  --sel-bg: color-mix(in srgb, var(--fg) 9%, transparent);
+  --sel-ring: color-mix(in srgb, var(--fg) 55%, transparent);
+}
 .di-shell { height: 100vh; background: var(--bg); }
 .di-top { height: var(--di-top); display: flex; align-items: center; gap: 14px; padding: 0 18px;
   border-bottom: 1px solid var(--line); background: var(--surface); position: relative; z-index: 5; }
@@ -12,13 +18,16 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .di-top .di-proj--set { color: var(--fg); }
 .di-top .di-toplink { margin-left: auto; flex-shrink: 0; }
+.di-theme-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius);
+  border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
+.di-theme-btn:hover { color: var(--fg); border-color: var(--muted); }
 .di-app { display: grid; grid-template-columns: var(--di-rail) minmax(0, 1fr); height: calc(100% - var(--di-top)); }
 .di-rail { border-right: 1px solid var(--line); background: var(--surface); padding: 22px 14px; display: flex;
   flex-direction: column; gap: 4px; overflow: auto; }
 .di-rail .sf-eyebrow { padding: 0 10px 10px; }
 .di-steps { display: flex; flex-direction: column; gap: 4px; }
 .di-rail .di-steps + .sf-eyebrow { margin-top: 14px; padding-top: 18px; border-top: 1px solid var(--line); }
-.di-step { position: relative; display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: center; text-align: left; padding: 10px;
+.di-step { position: relative; display: grid; grid-template-columns: 22px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 10px;
   border-radius: var(--radius); border: 1px solid transparent; background: none; color: var(--fg); text-decoration: none; }
 a.di-step:hover { background: var(--surface-2); }
 .di-step .di-lamp { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
@@ -36,6 +45,7 @@ a.di-step:hover { background: var(--surface-2); }
   box-shadow: 0 0 10px color-mix(in srgb, var(--go) 45%, transparent); }
 .di-step.active .di-lamp { animation: di-here 2.4s ease-in-out infinite; }
 @keyframes di-here { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--fg) 4%, transparent); } }
+.di-step .di-count { font: 600 11px var(--font-mono); color: var(--amber); font-variant-numeric: tabular-nums; }
 .di-step .di-t { font: 600 14px/1.2 var(--font-body); }
 .di-step.di-locked { color: var(--muted); cursor: default; opacity: .55; }
 .di-rail .di-foot { margin-top: auto; padding: 12px 0 0; border-top: 1px solid var(--line); }
@@ -44,6 +54,20 @@ a.di-step:hover { background: var(--surface-2); }
 /* Each route mounts a new screen element, so this replays on every step change. */
 .di-stage > * { animation: di-enter .38s cubic-bezier(.2, .8, .2, 1) backwards; } /* not "both": a held transform would trap position:fixed modals */
 @keyframes di-enter { from { opacity: 0; transform: translateY(8px); } }
+
+/* Step not reachable yet: red signal, what's missing, one way forward. */
+.di-needs { max-width: 440px; margin: 12vh auto 0; display: grid; justify-items: center; gap: 12px; text-align: center; }
+.di-fc .di-needs { margin: 32px 0 0; justify-items: start; text-align: left; }
+.di-needs__title { margin: 6px 0 0; font: 800 24px/1.15 var(--font-display); letter-spacing: -.02em; color: var(--fg); }
+.di-needs__body { margin: 0 0 6px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+
+/* shortcut: on-screen diagrams are the export PNGs (dark ink on white), so the
+   dark theme inverts them instead of asking the backend for a second render.
+   Downloads are untouched. Upgrade to a dark palette in backend/line_diagram.py
+   if a colour ever reads wrong inverted. */
+:root[data-theme="signal-flow"] :is(.di-s7-card__img, .di-rm__anchor img, .di-fc-fig img, .di-s8-corridor-preview__fig img) {
+  filter: invert(.9) hue-rotate(180deg);
+}
 
 @media (max-width: 920px) {
   /* Phone/tablet: the rail becomes a horizontal step strip above the stage. */
