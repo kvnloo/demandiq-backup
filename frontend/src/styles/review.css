@@ -234,6 +234,7 @@
 }
 .di-s7r__override-pair .di-s7r__paren {
   margin: 0 2px;
+  color: var(--muted);
 }
 
 /* Row overridden state */

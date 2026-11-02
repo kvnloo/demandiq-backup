@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
 import { setCellValue, setPhf, setHvPct } from '../store/projectStore'
+import { gridPaste } from '../lib/gridPaste'
 
 const DIRS = ['EB', 'WB', 'NB', 'SB']
 const MVTS = ['U', 'L', 'T', 'R']
@@ -17,7 +18,7 @@ export function activeMovements(approach) {
 }
 
 // One AM-or-PM volume input cell (number, with source colouring + AI badge).
-function VolCell({ cell, onChange }) {
+function VolCell({ cell, onChange, onPaste }) {
   const source = cell?._source
   const value = cell?.value
   const cls =
@@ -31,6 +32,7 @@ function VolCell({ cell, onChange }) {
         min="0"
         className="di-vol-input"
         value={value ?? ''}
+        onPaste={onPaste}
         onChange={(e) => {
           const raw = e.target.value
           onChange(raw === '' ? null : Number(raw))
@@ -40,7 +42,7 @@ function VolCell({ cell, onChange }) {
   )
 }
 
-function ScalarCell({ value, step, onChange }) {
+function ScalarCell({ value, step, onChange, onPaste }) {
   return (
     <td className="di-vol-td di-vol-td--cell">
       <input
@@ -49,6 +51,7 @@ function ScalarCell({ value, step, onChange }) {
         min="0"
         className="di-vol-input"
         value={value ?? ''}
+        onPaste={onPaste}
         onChange={(e) => {
           const raw = e.target.value
           onChange(raw === '' ? null : Number(raw))
@@ -56,6 +59,25 @@ function ScalarCell({ value, step, onChange }) {
       />
     </td>
   )
+}
+
+const PERIOD_COLS = ['AM', 'PM']
+
+// Paste into any cell: one value, a column, or a block copied from Excel fills
+// down and across from that cell (see lib/gridPaste). Falls back to the
+// browser's own paste when the clipboard holds no numbers.
+function pasteHandler(it, rowKeys, rowIdx, colIdx) {
+  return (e) => {
+    const writes = gridPaste(e.clipboardData.getData('text'), { rowKeys, nCols: 2, row: rowIdx, col: colIdx })
+    if (writes.length === 0) return
+    e.preventDefault()
+    for (const { row, col, value } of writes) {
+      const key = rowKeys[row], period = PERIOD_COLS[col]
+      if (key === 'PHF') setPhf(it.id, period, value)
+      else if (key === 'HV') setHvPct(it.id, period, value)
+      else setCellValue(it.id, period, key, value, 'manual')
+    }
+  }
 }
 
 // Volume entry, transposed to the locked AM (PM) convention: one row per active
@@ -65,6 +87,9 @@ function ScalarCell({ value, step, onChange }) {
 export default function VolumeGrid({ intersections }) {
   return (
     <div className="di-vol-wrap">
+      <p className="di-vol-hint">
+        Type, or paste from Excel: one number, a column or a whole block. It fills down and across from the cell you paste into.
+      </p>
       {intersections.map((it) => {
         const active = {
           EB: activeMovements(it.approaches?.EB),
@@ -72,6 +97,9 @@ export default function VolumeGrid({ intersections }) {
           NB: activeMovements(it.approaches?.NB),
           SB: activeMovements(it.approaches?.SB),
         }
+        const codesByDir = Object.fromEntries(DIRS.map((d) => [d, MVTS.filter((m) => active[d][m]).map((m) => `${d}${m}`)]))
+        const rowKeys = [...DIRS.flatMap((d) => codesByDir[d]), 'PHF', 'HV']
+        const paste = (key, col) => pasteHandler(it, rowKeys, rowKeys.indexOf(key), col)
         return (
           <section key={it.id} className="di-vol-int">
             <div className="di-vol-int__head">
@@ -97,7 +125,7 @@ export default function VolumeGrid({ intersections }) {
               </thead>
               <tbody>
                 {DIRS.map((d) => {
-                  const codes = MVTS.filter((m) => active[d][m]).map((m) => `${d}${m}`)
+                  const codes = codesByDir[d]
                   if (codes.length === 0) return null
                   return (
                     <Fragment key={d}>
@@ -110,10 +138,12 @@ export default function VolumeGrid({ intersections }) {
                           <VolCell
                             cell={it.volumes?.AM?.[code]}
                             onChange={(v) => setCellValue(it.id, 'AM', code, v, 'manual')}
+                            onPaste={paste(code, 0)}
                           />
                           <VolCell
                             cell={it.volumes?.PM?.[code]}
                             onChange={(v) => setCellValue(it.id, 'PM', code, v, 'manual')}
+                            onPaste={paste(code, 1)}
                           />
                         </tr>
                       ))}
@@ -122,13 +152,13 @@ export default function VolumeGrid({ intersections }) {
                 })}
                 <tr className="di-vol-scalar-row">
                   <td className="di-vol-td di-vol-td--mvt">PHF</td>
-                  <ScalarCell value={it.phf?.AM} step="0.001" onChange={(v) => setPhf(it.id, 'AM', v)} />
-                  <ScalarCell value={it.phf?.PM} step="0.001" onChange={(v) => setPhf(it.id, 'PM', v)} />
+                  <ScalarCell value={it.phf?.AM} step="0.001" onChange={(v) => setPhf(it.id, 'AM', v)} onPaste={paste('PHF', 0)} />
+                  <ScalarCell value={it.phf?.PM} step="0.001" onChange={(v) => setPhf(it.id, 'PM', v)} onPaste={paste('PHF', 1)} />
                 </tr>
                 <tr className="di-vol-scalar-row">
                   <td className="di-vol-td di-vol-td--mvt">HV %</td>
-                  <ScalarCell value={it.hvPct?.AM} step="0.1" onChange={(v) => setHvPct(it.id, 'AM', v)} />
-                  <ScalarCell value={it.hvPct?.PM} step="0.1" onChange={(v) => setHvPct(it.id, 'PM', v)} />
+                  <ScalarCell value={it.hvPct?.AM} step="0.1" onChange={(v) => setHvPct(it.id, 'AM', v)} onPaste={paste('HV', 0)} />
+                  <ScalarCell value={it.hvPct?.PM} step="0.1" onChange={(v) => setHvPct(it.id, 'PM', v)} onPaste={paste('HV', 1)} />
                 </tr>
               </tbody>
             </table>
