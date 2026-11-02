@@ -15,14 +15,10 @@ export const THEMES = [
   {
     id: 'signal-flow',
     label: 'Signal Flow',
-    blurb: 'Dark asphalt and Overpass type — the house theme shared with CrashIQ.',
-    swatch: { bg: '#0D1013', surface: '#151A1F', accent: '#5AA2FF' },
   },
   {
     id: 'signal-flow-day',
     label: 'Signal Flow Day',
-    blurb: 'The same house theme on fresh concrete, for daylight and printing.',
-    swatch: { bg: '#ECEEF0', surface: '#FFFFFF', accent: '#1F5FAD' },
   },
 ]
 
@@ -45,6 +41,9 @@ export function getStoredTheme() {
 
 // Apply a theme to the live document AND persist it. setAttribute drives
 // themes.css + the map-tile observer; returns the normalized id actually applied.
+// The other of the two themes — what the top-bar sun/moon switches to.
+export const otherTheme = (id) => (normalizeTheme(id) === 'signal-flow' ? 'signal-flow-day' : 'signal-flow')
+
 export function applyTheme(id) {
   const theme = normalizeTheme(id)
   document.documentElement.setAttribute('data-theme', theme)

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import { ChevronDown, Lock, Info, X as XIcon } from 'lucide-react'
 
 import {
@@ -63,12 +64,6 @@ export default function S5_BalancingSettings() {
     ensureBalancingDefaults()
   }, [needsVolumes])
 
-  // ── Empty / unconfigured guard ──────────────────────────────────────
-  useEffect(() => {
-    if (!needsVolumes) return
-    const t = setTimeout(() => navigate('/volumes'), 1000)
-    return () => clearTimeout(t)
-  }, [needsVolumes, navigate])
 
   const [advancedOpen, setAdvancedOpen] = useState(false)
   // Modal toggles must be declared before the needsVolumes early return below —
@@ -77,14 +72,7 @@ export default function S5_BalancingSettings() {
   const [linkInfoOpen, setLinkInfoOpen] = useState(false)
 
   if (needsVolumes) {
-    return (
-      <div className="di-s5 di-s5--center">
-        <div className="di-s4-empty">
-          <div className="di-banner">Enter volumes first.</div>
-          <p className="di-s3-empty__sub">Redirecting…</p>
-        </div>
-      </div>
-    )
+    return <NeedsStep title="Enter volumes first" body="Balancing needs counts to balance." to="/volumes" label="Go to Volume Entry" />
   }
 
   // Pull current values, with safe fallbacks during the brief window before the

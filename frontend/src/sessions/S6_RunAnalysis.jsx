@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import { Loader2, AlertTriangle, Download, ChevronDown, ChevronUp } from 'lucide-react'
 
 import {
@@ -157,12 +158,6 @@ export default function S6_RunAnalysis() {
     return () => clearInterval(id)
   }, [])
 
-  // ── Empty / unconfigured guard ──────────────────────────────────────
-  useEffect(() => {
-    if (!needsConfig) return
-    const t = setTimeout(() => navigate('/balancing'), 1000)
-    return () => clearTimeout(t)
-  }, [needsConfig, navigate])
 
   // ── Run state ───────────────────────────────────────────────────────
   const [status, setStatus] = useState(lastRun ? 'done' : 'idle')
@@ -239,14 +234,7 @@ export default function S6_RunAnalysis() {
   }
 
   if (needsConfig) {
-    return (
-      <div className="di-s6 di-s6--center">
-        <div className="di-s6-empty">
-          <div className="di-banner">Configure balancing first.</div>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>Redirecting…</p>
-        </div>
-      </div>
-    )
+    return <NeedsStep title="Configure balancing first" to="/balancing" label="Go to Balancing Settings" />
   }
 
   const hasResults = lastRun !== null

@@ -38,8 +38,8 @@ export default function IntersectionDiagram({ intersection, period }) {
   return (
     <div className="di-rm__anchor">
       <div className="di-segmented" role="group" aria-label="diagram view mode">
-        <button aria-pressed={mode === 'balanced'} onClick={() => setMode('balanced')}>Balanced</button>
-        <button aria-pressed={mode === 'delta'} onClick={() => setMode('delta')}>Changes</button>
+        <button className={`di-segmented__opt${mode === 'balanced' ? ' di-segmented__opt--on' : ''}`} aria-pressed={mode === 'balanced'} onClick={() => setMode('balanced')}>Balanced</button>
+        <button className={`di-segmented__opt${mode === 'delta' ? ' di-segmented__opt--on' : ''}`} aria-pressed={mode === 'delta'} onClick={() => setMode('delta')}>Changes</button>
       </div>
       {err && <div className="di-banner">{err}</div>}
       {png && (

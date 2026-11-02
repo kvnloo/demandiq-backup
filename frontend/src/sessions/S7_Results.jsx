@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 
 import {
   subscribe,
@@ -8,6 +9,7 @@ import {
   setDiagramNote,
 } from '../store/projectStore'
 import DiagramCard from '../components/DiagramCard'
+import { largestLinkGap } from '../lib/resultsKpis'
 import ResultsMap from '../components/ResultsMap'
 import { buildPayload } from '../lib/diagramPayload'
 
@@ -72,11 +74,6 @@ export default function S7_Results() {
 
   const needsRun = intersections.length === 0 || !hasAnyBalanced(intersections)
 
-  useEffect(() => {
-    if (!needsRun) return
-    const t = setTimeout(() => navigate('/analysis'), 1000)
-    return () => clearTimeout(t)
-  }, [needsRun, navigate])
 
   // ── Diagram cache ──────────────────────────────────────────────────
   // Keyed by `${id}-${period}-${viewMode}-${timestamp}` so re-running S6
@@ -121,14 +118,7 @@ export default function S7_Results() {
 
   // ── Empty redirect state ───────────────────────────────────────────
   if (needsRun) {
-    return (
-      <div className="di-s7 di-s7--center">
-        <div className="di-s7-empty">
-          <div className="di-banner">Run analysis first.</div>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>Redirecting…</p>
-        </div>
-      </div>
-    )
+    return <NeedsStep title="Run the analysis first" body="Results show the balanced volumes from the last run." to="/analysis" label="Go to Run Analysis" />
   }
 
   const canContinue = Array.from(diagrams.values()).some((d) => d.status === 'done')
@@ -142,6 +132,8 @@ export default function S7_Results() {
     return sum + Object.values(bal).reduce(
       (a, v) => a + (typeof v === 'number' ? v : 0), 0)
   }, 0) || null
+
+  const linkGap = largestLinkGap(lastRun, period)
 
   const convergedMap = (lastRun?.intConverged || {})[period]
   const convergedCount = convergedMap
@@ -193,6 +185,13 @@ export default function S7_Results() {
           <span className="sf-kpi__label">Converged</span>
           <span className="sf-kpi__value">
             {convergedCount === null ? '—' : `${convergedCount}/${intersections.length}`}
+          </span>
+        </div>
+        <div className="sf-kpi" title="Biggest difference between two neighbouring raw counts on the same link, before balancing">
+          <span className="sf-kpi__label">Largest count gap</span>
+          <span className="sf-kpi__value">
+            {linkGap === null ? '—' : linkGap.gap.toLocaleString()}
+            {linkGap && <small>veh/h · #{linkGap.fromNum}→#{linkGap.toNum} {linkGap.direction}</small>}
           </span>
         </div>
       </div>

@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { LifeBuoy } from 'lucide-react'
 import { exportDiagnostics } from '../lib/diagnostics'
 import { subscribe, getSnapshot, isExistingAnalysisDone } from '../store/projectStore'
-import { doneSteps } from '../lib/railProgress'
+import { doneSteps, partialSteps } from '../lib/railProgress'
 
 const STEPS = [
   { num: 1, label: 'Project Setup',      path: '/' },
@@ -28,11 +28,12 @@ const FORECAST_STEPS = [
 
 // Rail styled as CrashIQ's (styles/shell.css): numbered lamps, active step outlined.
 // NavLink adds the `active` class itself.
-function Step({ lamp, label }) {
+function Step({ lamp, label, count }) {
   return (
     <>
       <span className="di-lamp" aria-hidden="true">{lamp}</span>
       <span className="di-t">{label}</span>
+      {count && <span className="di-count" title={`${count} intersections done`}>{count}</span>}
     </>
   )
 }
@@ -41,6 +42,7 @@ export default function Sidebar() {
   const snap = useSyncExternalStore(subscribe, getSnapshot, () => ({}))
   const gateOpen = isExistingAnalysisDone()
   const done = doneSteps(snap)
+  const partial = partialSteps(snap)
 
   return (
     <nav className="di-rail" aria-label="Study steps">
@@ -48,7 +50,7 @@ export default function Sidebar() {
       <div className="di-steps">
         {STEPS.map(({ num, label, path }) => (
           <NavLink key={num} to={path} end={path === '/'} className={`di-step${done.has(num) ? ' di-done' : ''}`}>
-            <Step lamp={done.has(num) ? '✓' : num} label={label} />
+            <Step lamp={done.has(num) ? '✓' : num} label={label} count={partial[num]} />
           </NavLink>
         ))}
       </div>
