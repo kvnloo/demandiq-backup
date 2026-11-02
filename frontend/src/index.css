@@ -4,8 +4,8 @@
  * theme.
  */
 :root {
-  --font-sans:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
-  --font-display: 'DM Sans', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-sans:    'Overpass', system-ui, -apple-system, sans-serif;
+  --font-display: 'Overpass', 'Highway Gothic', 'Arial Narrow', system-ui, sans-serif;
 
   font-family: var(--font-sans);
   font-synthesis: none;

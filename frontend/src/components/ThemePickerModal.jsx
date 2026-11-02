@@ -1,6 +1,6 @@
 import { THEMES } from '../lib/theme'
 
-// Appearance picker — two selectable cards (Night Traffic / Sunshine).
+// Appearance picker — two selectable cards (Signal Flow / Signal Flow Day).
 // Selection applies LIVE (the parent calls applyTheme on select, so the whole
 // app — including the map basemap — re-themes behind the modal), then "Done"
 // closes. Backdrop click also closes, keeping the current selection.
