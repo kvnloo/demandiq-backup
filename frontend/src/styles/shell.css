@@ -9,6 +9,13 @@
   --sel-ring: color-mix(in srgb, var(--fg) 55%, transparent);
 }
 .di-shell { height: 100vh; background: var(--bg); }
+/* Form controls don't inherit the page font by default; without this, unstyled
+   buttons and inputs fall back to the system face. */
+button, input, select, textarea { font-family: inherit; }
+/* Leaflet's attribution bar on our surfaces (as CrashIQ). !important because
+   leaflet.css is imported later, by the map screens, at the same specificity. */
+.leaflet-container .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 82%, transparent) !important; color: var(--muted) !important; }
+.leaflet-container .leaflet-control-attribution a { color: var(--fg) !important; }
 .di-top { height: var(--di-top); display: flex; align-items: center; gap: 14px; padding: 0 18px;
   border-bottom: 1px solid var(--line); background: var(--surface); position: relative; z-index: 5; }
 .di-brand { display: flex; align-items: center; gap: 10px; font: 900 19px/1 var(--font-display); letter-spacing: -.02em;

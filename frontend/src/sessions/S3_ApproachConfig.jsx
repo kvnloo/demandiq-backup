@@ -298,7 +298,7 @@ function ApproachCard({ dir, ap, onInc, onDec, onDne, onLaneClick }) {
             ))}
           </div>
           <div className="di-ap-card__pills">
-            <span className="di-ap-pill di-ap-pill--blue">{ap.lanes.length} Lanes</span>
+            <span className="di-ap-pill di-ap-pill--blue">{ap.lanes.length} {ap.lanes.length === 1 ? 'lane' : 'lanes'}</span>
             <span className="di-ap-pill di-ap-pill--amber">
               {ap.lanes.map((l) => l.movement).join(', ')}
             </span>

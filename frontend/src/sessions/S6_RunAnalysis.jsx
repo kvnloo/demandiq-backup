@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import NeedsStep from '../components/NeedsStep'
-import { Loader2, AlertTriangle, Download, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
 
 import {
   subscribe,
@@ -13,7 +13,6 @@ import {
   clearAllOverrides,
   resolveLinkMode,
 } from '../store/projectStore'
-import { exportDiagnostics } from '../lib/diagnostics'
 import { dropsSummary, formatIntRange, MAJOR_DROP_THRESHOLD_VEH } from '../lib/dropsSummary'
 import { computeHeroState } from '../lib/heroState'
 import { buildResolvedRows } from '../lib/resolvedTargets'
@@ -400,15 +399,6 @@ export default function S6_RunAnalysis() {
       <footer className="di-s6__footer">
         {hasResults && (
           <>
-            <button
-              type="button"
-              className="di-btn-ghost"
-              disabled={isRunning}
-              onClick={exportDiagnostics}
-              title="Download a JSON dump of project state + last run for debugging"
-            >
-              <Download size={14} /> Export diagnostics
-            </button>
             <button
               type="button"
               className="di-btn-secondary"

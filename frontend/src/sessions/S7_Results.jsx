@@ -191,7 +191,7 @@ export default function S7_Results() {
           <span className="sf-kpi__label">Largest count gap</span>
           <span className="sf-kpi__value">
             {linkGap === null ? '—' : linkGap.gap.toLocaleString()}
-            {linkGap && <small>veh/h · #{linkGap.fromNum}→#{linkGap.toNum} {linkGap.direction}</small>}
+            {linkGap ? <small>veh/h · #{linkGap.fromNum}→#{linkGap.toNum} {linkGap.direction}</small> : <small>no shared links compared</small>}
           </span>
         </div>
       </div>

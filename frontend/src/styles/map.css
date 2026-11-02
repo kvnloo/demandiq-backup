@@ -757,7 +757,7 @@
 /* Stale-lastRun banner (just below the toolbar, top-center) */
 .di-s2-flow-stale {
   position: absolute;
-  top: 16px;
+  top: 64px;   /* clears the map search box, which sits at the top-left */
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
