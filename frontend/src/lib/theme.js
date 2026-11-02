@@ -1,4 +1,6 @@
-// Global appearance theme — Night Traffic (dark, default) / Sunshine (light).
+// Global appearance theme — Signal Flow (dark, default) / Signal Flow Day (light).
+// Night Traffic and Sunshine were retired; a stored id from them falls back to
+// the default via normalizeTheme.
 //
 // This is ONE preference for the whole app, not per-project, so it lives in its
 // own localStorage key (separate from 'demandiq:project') and is applied as the
@@ -7,23 +9,9 @@
 // (see lib/themeTiles.js).
 
 export const THEME_STORAGE_KEY = 'demandiq:theme'
-export const DEFAULT_THEME = 'night-traffic'
+export const DEFAULT_THEME = 'signal-flow'
 
 export const THEMES = [
-  {
-    id: 'night-traffic',
-    label: 'Night Traffic',
-    blurb: 'Dark — easy on the eyes for late corridor work and projectors.',
-    // Preview swatch (mirrors themes.css; can't use var() — those resolve to the
-    // ACTIVE theme, but each card must show its OWN palette).
-    swatch: { bg: '#0B0E12', surface: '#161A22', accent: '#60A5FA' },
-  },
-  {
-    id: 'sunshine',
-    label: 'Sunshine',
-    blurb: 'Light — crisp for daytime desk work and report screenshots.',
-    swatch: { bg: '#FAFAF9', surface: '#FFFFFF', accent: '#2563EB' },
-  },
   {
     id: 'signal-flow',
     label: 'Signal Flow',

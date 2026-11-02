@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from 'react'
+import { Link } from 'react-router-dom'
 import { subscribe, getSnapshot, clearProject } from '../store/projectStore'
 // Pulled in so the confirm modal + buttons are styled even on routes (e.g. S1)
 // whose own modules don't import these sheets.
@@ -31,36 +32,17 @@ export default function TopBar() {
   }
 
   return (
-    <header
-      style={{
-        height: 56,
-        flexShrink: 0,
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 16,
-        padding: '0 24px',
-        fontSize: 13,
-      }}
-    >
-      <span
-        style={{
-          flex: 1,
-          minWidth: 0,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          color: hasName ? 'var(--text-primary)' : 'var(--text-secondary)',
-          fontWeight: hasName ? 500 : 400,
-        }}
-      >
-        {display}
-      </span>
+    <header className="di-top">
+      <Link to="/" className="di-brand" aria-label="DemandIQ home">
+        <span className="sf-sig" data-s="g" aria-hidden="true"><i /><i /><i /></span>
+        <span>Demand<b>IQ</b></span>
+      </Link>
+      <div className={`di-proj${hasName ? ' di-proj--set' : ''}`} title={display}>{display}</div>
 
       <button
         type="button"
-        className="di-btn-secondary"
-        style={{ height: 32, padding: '0 14px', fontSize: 13, flexShrink: 0 }}
+        className="di-btn-secondary di-toplink"
+        style={{ height: 32, padding: '0 14px', fontSize: 13 }}
         onClick={() => setConfirmOpen(true)}
       >
         New project

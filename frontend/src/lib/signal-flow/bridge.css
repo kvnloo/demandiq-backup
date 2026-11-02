@@ -12,8 +12,7 @@
  *
  * So instead of a second palette, this is an alias layer: each Signal Flow
  * token points at DemandIQ's equivalent. The useful consequence is that sf-*
- * components inherit the ACTIVE theme — they look right under Night Traffic
- * and Sunshine too, not only under Signal Flow. Nothing here sets a color of
+ * components inherit the ACTIVE theme — Signal Flow or Signal Flow Day. Nothing here sets a color of
  * its own except the physical constants below.
  *
  * --surface and --font-display are deliberately absent: DemandIQ already
@@ -66,7 +65,6 @@
   --los-a: #07864F; --los-b: #3D8F2E; --los-c: #7A7F0E;
   --los-d: #9E6400; --los-e: #B8481A; --los-f: #C4261B;
 }
-:root[data-theme="night-traffic"],
 :root[data-theme="signal-flow"] {
   --los-a: #1EE39A; --los-b: #7FD957; --los-c: #D2D63A;
   --los-d: #FFB020; --los-e: #FF8A3D; --los-f: #FF5A4E;

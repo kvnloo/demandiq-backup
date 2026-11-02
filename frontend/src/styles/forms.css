@@ -16,9 +16,10 @@
 
 .di-h1 {
   font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 28px;
-  letter-spacing: -0.01em;
+  font-weight: 900;   /* Signal Flow display: heavy highway-gothic headline, as CrashIQ */
+  font-size: clamp(30px, 3.2vw, 40px);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
   color: var(--text-primary);
   margin: 8px 0 6px;
 }
@@ -173,10 +174,10 @@
   padding: 0 24px;
   border-radius: 8px;
   border: none;
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--go);   /* Signal Flow: the primary action is the green light */
+  color: var(--on-go);
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 800;
   font-size: 14px;
   cursor: pointer;
   transition: opacity 120ms, transform 80ms;
@@ -338,6 +339,7 @@
 /* Signal Flow hero on S1 — sits between the subtitle and the form. The
    generous bottom margin clears the figcaption, which is inside the figure
    and would otherwise sit on the first field label. */
+.sf-hero { margin: 0; }
 .di-s1-hero {
   margin: 20px 0 34px;
 }

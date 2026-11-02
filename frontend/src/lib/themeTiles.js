@@ -2,9 +2,7 @@
 //
 // The corridor map's basemap follows the active palette (data-theme on the
 // documentElement, set by the S1 picker):
-//   night-traffic    (dark, default) → Voyager  (warm, muted dark labels)
-//   sunshine         (light)         → Positron (clean light)
-//   signal-flow      (dark)          → Voyager
+//   signal-flow      (dark, default) → Voyager
 //   signal-flow-day  (light)         → Positron
 //
 // Shared by two consumers so they never disagree:
@@ -37,12 +35,12 @@ const LIGHT_URL = `${ESRI}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`
 // and painting that placeholder across an intersection view.
 export const TILE_MAX_NATIVE_ZOOM = 16
 
-// The active theme name from the documentElement. Defaults to 'night-traffic'
+// The active theme name from the documentElement. Defaults to 'signal-flow'
 // to mirror themes.css's bare :root block, which renders the dark palette when
 // no data-theme attribute is present (app boot before the picker runs).
 export function currentTheme() {
-  if (typeof document === 'undefined') return 'night-traffic'
-  return document.documentElement.getAttribute('data-theme') || 'night-traffic'
+  if (typeof document === 'undefined') return 'signal-flow'
+  return document.documentElement.getAttribute('data-theme') || 'signal-flow'
 }
 
 // Light palettes get Positron; everything else (including the no-attribute
@@ -51,7 +49,7 @@ export function currentTheme() {
 // test silently handed dark tiles to any new light palette.
 // Takes an explicit theme so it stays pure and testable; defaults to reading
 // the live attribute for call-site convenience.
-const LIGHT_THEMES = new Set(['sunshine', 'signal-flow-day'])
+const LIGHT_THEMES = new Set(['signal-flow-day'])
 
 export function tileUrlForTheme(theme = currentTheme()) {
   return LIGHT_THEMES.has(theme) ? LIGHT_URL : DARK_URL

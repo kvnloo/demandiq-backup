@@ -1,12 +1,8 @@
 /* Theme palettes — gated on the documentElement's data-theme attribute.
  *
- * Two themes from the kickoff DECISION:
- *   night-traffic (DEFAULT, dark)  — restores the current visual identity
- *                                     with the slightly softer #60A5FA accent
- *                                     (vs the previous #0A84FF) so the brand
- *                                     reads as "deliberate" rather than
- *                                     "default macOS blue"
- *   sunshine      (light)          — for daylight desk work
+ * Two themes, both Signal Flow (the house theme shared with CrashIQ):
+ *   signal-flow     (DEFAULT, dark)
+ *   signal-flow-day (light)        — for daylight desk work and printing
  *
  * Token names match the existing convention from the prior :root block in
  * index.css. `--surface` is new: the stray `#1A1D26` literal across map.css /
@@ -18,7 +14,7 @@
  * and stay constant across themes. They live as inline hex with a per-file
  * comment per the Phase 1 audit.
  *
- * The bare `:root` block mirrors night-traffic so an app boot without a
+ * The bare `:root` block mirrors signal-flow so an app boot without a
  * data-theme attribute still renders correctly.
  */
 
@@ -27,7 +23,7 @@
  * RESERVED for alerts (methodology divergence, unmatched-leg status, validation
  * errors) — never decorative. Match-review status colors map straight to these.
  * Not gated on data-theme: signals don't change between night/day, and the
- * sunshine block below doesn't override them, so both themes inherit these. */
+ * theme blocks below don't override them, so both themes inherit these. */
 :root {
   --signal-green:       #22C55E;
   --signal-amber:       #F4B400;
@@ -41,41 +37,6 @@
      (backend/line_diagram.py DG_DELTA_UP / DG_DELTA_DOWN). */
   --delta-up:   #2D8050;
   --delta-down: #B0413E;
-}
-
-:root,
-:root[data-theme="night-traffic"] {
-  --bg-base:        #0B0E12;   /* Batman charcoal canvas */
-  --bg-deep:        #0F1118;
-  --bg-elevated:    rgba(255, 255, 255, 0.02);
-  --bg-hover:       rgba(255, 255, 255, 0.04);
-  --surface:        #161A22;   /* charcoal surface */
-  --accent:         #60A5FA;
-  --accent-hover:   #7DB3FB;
-  --accent-glow:    rgba(96, 165, 250, 0.06);
-  --text-primary:   #F0F2F8;
-  --text-secondary: #B8BFC9;
-  --text-tertiary:  #9AA3B2;
-  --border:         rgba(255, 255, 255, 0.07);
-  --border-strong:  rgba(255, 255, 255, 0.15);
-  color-scheme: dark;
-}
-
-:root[data-theme="sunshine"] {
-  --bg-base:        #FAFAF9;
-  --bg-deep:        #F5F5F4;
-  --bg-elevated:    #FFFFFF;
-  --bg-hover:       rgba(0, 0, 0, 0.03);
-  --surface:        #FFFFFF;
-  --accent:         #2563EB;
-  --accent-hover:   #3B82F6;
-  --accent-glow:    rgba(37, 99, 235, 0.08);
-  --text-primary:   #1C1917;
-  --text-secondary: #57534E;
-  --text-tertiary:  #78716C;
-  --border:         #E7E5E4;
-  --border-strong:  #D6D3D1;
-  color-scheme: light;
 }
 
 /* ── Signal Flow ──────────────────────────────────────────────────────────────
@@ -97,6 +58,7 @@
  * dark / #1F5FAD light) rather than --go, keeping green free to mean "go,
  * pass, acceptable" per the theme's first rule: signal colors carry meaning
  * only, never decoration. */
+:root,
 :root[data-theme="signal-flow"] {
   --bg-base:        #0D1013;   /* asphalt at night */
   --bg-deep:        #090C0E;

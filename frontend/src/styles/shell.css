@@ -1,0 +1,60 @@
+/* App shell copied from CrashIQ (frontend/src/styles/app.css) so the two tools
+   look like one product: header bar, left step rail with lamp numbers, one stage.
+   di- prefixed so it never collides with screen styles. */
+:root { --di-rail: 232px; --di-top: 56px; }
+.di-shell { height: 100vh; background: var(--bg); }
+.di-top { height: var(--di-top); display: flex; align-items: center; gap: 14px; padding: 0 18px;
+  border-bottom: 1px solid var(--line); background: var(--surface); position: relative; z-index: 5; }
+.di-brand { display: flex; align-items: center; gap: 10px; font: 900 19px/1 var(--font-display); letter-spacing: -.02em;
+  color: var(--fg); text-decoration: none; }
+.di-brand b { color: var(--go); }
+.di-top .di-proj { color: var(--muted); font: 13px var(--font-mono); padding-left: 14px; border-left: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.di-top .di-proj--set { color: var(--fg); }
+.di-top .di-toplink { margin-left: auto; flex-shrink: 0; }
+.di-app { display: grid; grid-template-columns: var(--di-rail) minmax(0, 1fr); height: calc(100% - var(--di-top)); }
+.di-rail { border-right: 1px solid var(--line); background: var(--surface); padding: 22px 14px; display: flex;
+  flex-direction: column; gap: 4px; overflow: auto; }
+.di-rail .sf-eyebrow { padding: 0 10px 10px; }
+.di-steps { display: flex; flex-direction: column; gap: 4px; }
+.di-rail .di-steps + .sf-eyebrow { margin-top: 14px; padding-top: 18px; border-top: 1px solid var(--line); }
+.di-step { position: relative; display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: center; text-align: left; padding: 10px;
+  border-radius: var(--radius); border: 1px solid transparent; background: none; color: var(--fg); text-decoration: none; }
+a.di-step:hover { background: var(--surface-2); }
+.di-step .di-lamp { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 10px var(--font-mono); border: 1px solid var(--line); color: var(--muted); }
+.di-step.active { background: var(--surface-2); border-color: var(--line); }
+.di-step.active .di-lamp { border-color: var(--fg); color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 12%, transparent); }
+.di-step--fc .di-lamp { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); }
+.di-step--fc.active .di-lamp { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 14%, transparent); }
+/* Signal pole: a wire from each lamp to the next. It turns green between two
+   finished steps, so a finished run reads as a green wave down the rail. */
+.di-step:not(:last-child)::after { content: ""; position: absolute; left: 20.5px; top: calc(50% + 12px); height: calc(100% - 20px);
+  width: 1px; background: var(--line); }
+.di-step.di-done:has(+ .di-done)::after { background: var(--go); box-shadow: 0 0 6px color-mix(in srgb, var(--go) 60%, transparent); }
+.di-step.di-done .di-lamp { background: var(--go); color: var(--on-go); border-color: transparent; font-size: 11px;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--go) 45%, transparent); }
+.di-step.active .di-lamp { animation: di-here 2.4s ease-in-out infinite; }
+@keyframes di-here { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--fg) 4%, transparent); } }
+.di-step .di-t { font: 600 14px/1.2 var(--font-body); }
+.di-step.di-locked { color: var(--muted); cursor: default; opacity: .55; }
+.di-rail .di-foot { margin-top: auto; padding: 12px 0 0; border-top: 1px solid var(--line); }
+.di-rail .di-foot button { width: 100%; justify-content: center; font-size: 12px; padding: 9px 12px 8px; }
+.di-stage { overflow: auto; min-width: 0; height: 100%; padding: 24px 32px; }
+/* Each route mounts a new screen element, so this replays on every step change. */
+.di-stage > * { animation: di-enter .38s cubic-bezier(.2, .8, .2, 1) backwards; } /* not "both": a held transform would trap position:fixed modals */
+@keyframes di-enter { from { opacity: 0; transform: translateY(8px); } }
+
+@media (max-width: 920px) {
+  /* Phone/tablet: the rail becomes a horizontal step strip above the stage. */
+  .di-app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .di-rail { flex-direction: row; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--line); gap: 6px; }
+  .di-rail .sf-eyebrow, .di-rail .di-foot { display: none; }
+  .di-step { grid-template-columns: 22px auto; gap: 8px; padding: 6px 10px; white-space: nowrap; flex: none; }
+  .di-top .di-proj { display: none; }
+  .di-stage { padding: 16px; }
+  .di-step::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .di-stage > *, .di-step.active .di-lamp { animation: none; }
+}
