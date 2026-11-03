@@ -24,6 +24,7 @@ corrupting the refinement join.
 
 from pathlib import Path
 
+from forecasting.adapters.hpms import ingest_hpms
 from forecasting.adapters.sandag import ingest_sandag
 
 # ── Region adapter registry ───────────────────────────────────────────────────
@@ -36,11 +37,15 @@ from forecasting.adapters.sandag import ingest_sandag
 # to the project CRS, and emits a canonical NetworkLayer whose links populate the
 # fields the engine consumes (flow, length_mi, daily_total). Adding a region =
 # implement that contract and register it here — NOT editing a conditional. See
-# docs/forecasting-multicounty.md ("How to add a region"). v1 ships SANDAG only;
-# additional adapters are deferred until a concrete second model exists.
+# docs/forecasting-multicounty.md ("How to add a region"). HPMS_CA is the
+# statewide fallback: every California county, read live from FHWA (no files).
 ADAPTERS = {
     "SANDAG": ingest_sandag,
+    "HPMS_CA": ingest_hpms,
 }
+# Regions whose network is a server-side file the engineer names; the others
+# read a public service and take no path.
+FILE_REGIONS = {"SANDAG"}
 
 # Server-side SANDAG network assets live under the repo's data/ dir (gitignored).
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -96,7 +101,7 @@ def ingest_networks(
         networks: list of specs, each:
             { "role": "base"|"horizon", "scenario_year": int, "path"?: shp_path }
             `path` is optional if `role` is in SANDAG_ASSET_REGISTRY.
-        region: only "SANDAG" is built in v1.
+        region: a key of ADAPTERS — "SANDAG" (model file) or "HPMS_CA" (statewide, live).
         filter_radius_ft: passed through to the adapter (default 300).
         min_overlap: minimum base→horizon link_id overlap fraction required when
             both roles are present (default 0.5). Below it → fail loud.
@@ -127,7 +132,7 @@ def ingest_networks(
             raise ValueError(f"ingest_networks: duplicate network role {role!r}")
         if "scenario_year" not in spec:
             raise ValueError(f"ingest_networks: network role {role!r} missing 'scenario_year'")
-        path = _resolve_path(spec)
+        path = _resolve_path(spec) if region in FILE_REGIONS else spec.get("path", "live")
         layers[role] = adapter(
             path, spec["scenario_year"], project_intersections_4326,
             filter_radius_ft=filter_radius_ft,
