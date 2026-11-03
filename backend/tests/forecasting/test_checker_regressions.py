@@ -165,3 +165,28 @@ def test_hpms_growth_search_radius_in_longitude(tmp_path):
     p.write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
     lk = ingest_hpms(str(p), 2044, [{"num": 1, "lat": LAT, "lng": LNG}]).links[0]
     assert lk.daily_total == pytest.approx(24000)
+
+
+# EXAM-1 (Examiner forecast track, seeds 600031/600102) — a fuzzy fit has many
+# answers; the one reached must not depend on whether the corridor runs E–W or N–S
+def test_fuzzy_same_answer_when_corridor_is_rotated(world):
+    rot = {"EB": "NB", "NB": "WB", "WB": "SB", "SB": "EB"}
+    inv = {v: k for k, v in rot.items()}
+    b = _body(world, turn_method="fuzzy", peak_hour_factor=0.3, refine_method="difference")
+    # pull the legs apart so the bands bind and the order matters
+    for l in b["layers"]["horizon"]["links"]:
+        if l["link_id"].startswith("C"):
+            l["flow"]["ab"]["AM"] *= 1.25
+    r = json.loads(json.dumps(b))
+    r["balanced_tmcs"] = {"AM": {i: {rot[m[:2]] + m[2:]: v for m, v in mv.items()}
+                                 for i, mv in b["balanced_tmcs"]["AM"].items()}}
+    r["links"] = [{**l, "direction": "NB/SB"} for l in b["links"]]
+    r["coords"] = {i: {"lat": 37.58 + (c["lng"] + 122.03), "lng": -122.03} for i, c in b["coords"].items()}
+    r["matches"] = [{**m, "legs": {rot[d]: v for d, v in m["legs"].items()}} for m in b["matches"]]
+    c = _client()
+    ew = c.post("/forecast/run", json=b).json()["AM"]["pass2"]["balanced_unrounded"]
+    ns = c.post("/forecast/run", json=r).json()["AM"]["pass2"]["balanced_unrounded"]
+    for i, mv in ew.items():
+        back = {inv[m[:2]] + m[2:]: v for m, v in ns[i].items()}
+        for m, v in mv.items():
+            assert back[m] == pytest.approx(v, abs=0.01), (i, m)

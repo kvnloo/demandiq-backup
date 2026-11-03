@@ -147,6 +147,23 @@ def _paths(order, axis, counts):
 
 
 # ── Fitting ───────────────────────────────────────────────────────────────────
+def _role(h, axis):
+    """Frame-relative name of a heading: 0 = along the chain (west→east or
+    south→north), 1 = back, 2/3 = the two cross-street headings. Rotating the
+    corridor 90° relabels compass codes but keeps roles."""
+    if axis == "NB/SB":
+        return {"NB": 0, "SB": 1, "WB": 2, "EB": 3}[h]
+    return {"EB": 0, "WB": 1, "NB": 2, "SB": 3}[h]
+
+
+def _ordered(members, key):
+    """Constraints in a frame-relative order. A banded (fuzzy) fit has many
+    answers and the one reached depends on the order constraints are scaled in;
+    compass-code order would make a north–south corridor answer differently
+    from the same corridor drawn east–west."""
+    return {c: members[c] for c in sorted(members, key=key)}
+
+
 def fit(x, members, bands, *, tol=TOL, max_iter=MAX_ITER):
     """Multiplicative fitting: scale the trips in each constraint until its sum
     lies inside [lo, hi]. members: {cid: [trip idx]}; bands: {cid: (lo, hi)}.
@@ -234,6 +251,9 @@ def forecast_trips(refinement_results, base_tmcs, links, coords, *, method="frat
         for cid in members:
             c = float(counts[cid[0]].get(cid[1], 0) or 0)
             bands[cid] = (c * (1 - b0), c * (1 + b0))
+        pos = {n: i for i, n in enumerate(order)}
+        mv_key = lambda c: (pos[c[0]], _role(c[1][:2], axis), "LTR".index(c[1][2]) if c[1][2] in "LTR" else 3)  # noqa: E731
+        members = _ordered(members, mv_key)
         base_x, it0, w0 = fit([1.0] * len(trips), members, bands)
         base_flags = []
         if w0 >= 0.01:
@@ -265,6 +285,7 @@ def forecast_trips(refinement_results, base_tmcs, links, coords, *, method="frat
             fb[c] = (v * t / so,) * 2 if so else (0.0, 0.0)
         for c, v in d_tot.items():
             fb[c] = (v * t / sd,) * 2 if sd else (0.0, 0.0)
+        fm = _ordered(fm, lambda c: (c[0], pos[c[1]], _role(c[2], axis)))
         fut_x, it1, w1 = fit(base_x, fm, fb)
         if method == "fuzzy":
             # Start from the Fratar table, then pull every leg (main street included)
@@ -280,6 +301,7 @@ def forecast_trips(refinement_results, base_tmcs, links, coords, *, method="frat
                 kind, n, h = c
                 v = tin[n].get(h, 0.0) if kind == "IN" else tout[n].get(OPPOSITE[h], 0.0)
                 fb[c] = (v * (1 - band), v * (1 + band))
+            fm = _ordered(fm, lambda c: (pos[c[1]], c[0], _role(c[2], axis)))
             fut_x, it2, w1 = fit(fut_x, fm, fb)
             it1 += it2
         vol = _assign(trips, fut_x)
