@@ -11,6 +11,7 @@ frontend/dist/
 data/sandag/
 # Forecasting: HPMS service cache (re-downloadable)
 data/hpms/
+data/mtc
 # Forecasting: isolated geo-deps virtualenv (geopandas/GDAL — dev/test only)
 backend/.venv-forecasting/
 

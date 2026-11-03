@@ -173,15 +173,15 @@ def test_method_falls_back_to_ratio_without_k():
     assert any(f["code"] == "REFINE-NO-K" for f in nb_in["flags"])
 
 
-# ── Negative clamp (difference path) ──────────────────────────────────────────
-def test_negative_difference_clamped():
+# ── Negative difference → ratio (NCHRP 255 p. 50) ─────────────────────────────
+def test_negative_difference_falls_back_to_ratio():
     base = dict(_DEF, S=(2000, 1160))
     horizon = dict(_scaled(_DEF, 1.5), S=(0, 1740))            # NB inbound Mf=0, Mb=2000
     r = _refine(base, horizon, peak_hour_factor=1.0, method="difference")
     nb_in = r["approaches"]["NB"]["inbound"]
-    # diff = 650 + 1.0·(0 − 2000) = −1350 → clamp 0.
-    assert nb_in["refined"] == 0.0
-    assert any(f["code"] == "REFINE-NEGATIVE-CLAMP" for f in nb_in["flags"])
+    # diff = 650 + 1.0·(0 − 2000) = −1350 → ratio 650 × 0/2000 = 0.
+    assert nb_in["refined"] == 0.0 and nb_in["method"] == "ratio"
+    assert any(f["code"] == "REFINE-NEGATIVE-TO-RATIO" for f in nb_in["flags"])
 
 
 # ── Method divergence ─────────────────────────────────────────────────────────
@@ -226,3 +226,57 @@ def test_real_identity_growth_returns_count():
         for direction in ("inbound", "outbound"):
             sub = r["approaches"][d][direction]
             assert sub["refined"] == pytest.approx(sub["count_base"])
+
+
+# ── Guideline additions: year interpolation, NCHRP 765 pick, flags ────────────
+def _refine_years(base_flows, horizon_flows, yb, yf, **kw):
+    base, horizon = _layer(base_flows), _layer(horizon_flows)
+    base.scenario_year, horizon.scenario_year = yb, yf
+    mr = match_network_to_legs([_intx()], base)
+    return refine_corridor(mr, base, horizon, COUNTS, Period.AM, **kw)[0]
+
+
+def test_model_years_interpolated_to_count_and_horizon():
+    # NB inbound model 1000 (2015) → 1700 (2050): 1200 in 2025, 1600 in 2045.
+    r = _refine_years(_DEF, dict(_DEF, S=(1700, 1160)), 2015, 2050, count_year=2025, horizon_year=2045)
+    nb = r["approaches"]["NB"]["inbound"]
+    assert nb["model_base"] == pytest.approx(1200) and nb["model_future"] == pytest.approx(1600)
+    assert nb["refined"] == pytest.approx(650 * 1600 / 1200)        # ×1.33, not ×1.70
+    assert nb["annual_growth_pct"] == pytest.approx(((1600 / 1200) ** (1 / 20) - 1) * 100, abs=0.01)
+
+
+def test_decline_kept_and_noted_no_floor():
+    r = _refine_years(_DEF, dict(_DEF, S=(800, 1160)), 2015, 2050, count_year=2025, horizon_year=2045)
+    nb = r["approaches"]["NB"]["inbound"]
+    assert nb["refined"] < 650                                      # negative growth stands
+    assert any(f["code"] == "REFINE-DECLINE" for f in nb["flags"])
+
+
+def test_horizon_range_is_count_year_to_plus_50():
+    with pytest.raises(ValueError, match="between the count year"):
+        _refine_years(_DEF, _DEF, 2015, 2050, count_year=2025, horizon_year=2080)
+    r = _refine_years(_DEF, _scaled(_DEF, 1.5), 2015, 2050, count_year=2025, horizon_year=2075)
+    assert any(f["code"] == "REFINE-EXTRAPOLATED" for f in r["approaches"]["NB"]["flags"])
+
+
+def test_nchrp765_uses_difference_when_count_far_above_model():
+    # count 650, model 50 → 150, K = 1: R = 13 > 2 → difference 750 (ratio would be 1950).
+    r = _refine(dict(_DEF, S=(50, 1160)), dict(_DEF, S=(150, 1160)), peak_hour_factor=1.0, method="nchrp765")
+    nb = r["approaches"]["NB"]["inbound"]
+    assert nb["method"] == "difference" and nb["refined"] == pytest.approx(750)
+    assert any(f["code"] == "REFINE-MODEL-VS-COUNT" for f in nb["flags"])
+
+
+def test_zero_base_uses_difference_when_k_given():
+    r = _refine(dict(_DEF, S=(0, 1160)), dict(_DEF, S=(200, 1160)), peak_hour_factor=0.5, method="ratio")
+    nb = r["approaches"]["NB"]["inbound"]
+    assert nb["method"] == "difference" and nb["refined"] == pytest.approx(650 + 100)
+
+
+def test_capacity_change_flag():
+    base, horizon = _layer(_DEF), _layer(_scaled(_DEF, 1.2))
+    for lk in base.links: lk.lanes = 2
+    for lk in horizon.links: lk.lanes = 4
+    mr = match_network_to_legs([_intx()], base)
+    r = refine_corridor(mr, base, horizon, COUNTS, Period.AM)[0]
+    assert any(f["code"] == "REFINE-CAPACITY-CHANGE" for f in r["approaches"]["NB"]["flags"])

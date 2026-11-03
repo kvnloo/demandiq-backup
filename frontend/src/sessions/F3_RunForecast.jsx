@@ -23,6 +23,7 @@ const METHODS = [
   { id: 'ratio', label: 'Ratio' },
   { id: 'difference', label: 'Difference' },
   { id: 'combined', label: 'Combined' },
+  { id: 'nchrp765', label: 'Auto (NCHRP 765)' },
 ]
 
 function legNeedsReview(leg) {
@@ -124,7 +125,7 @@ export default function F3_RunForecast() {
 
       {!matches ? (
         <div className="di-fc-note">
-          Pull and match the SANDAG network first.{' '}
+          Pull and match the model network first.{' '}
           <button
             type="button"
             onClick={() => navigate('/forecast/match')}
@@ -176,10 +177,11 @@ export default function F3_RunForecast() {
               })}
             </div>
             <p className="di-help" style={{ lineHeight: 1.5 }}>
-              Ratio is the default because SANDAG model flows are <strong>period</strong>{' '}
-              volumes while DemandIQ counts are <strong>peak-hour</strong> — the ratio
-              method is time-base invariant. Difference and Combined need a peak-hour
-              factor K to be dimensionally valid; enter one below to unlock them.
+              Ratio is the default because model flows are <strong>period</strong>{' '}
+              volumes (e.g. 6–10 am) while DemandIQ counts are <strong>peak-hour</strong> — the
+              ratio method works either way. Difference, Combined and Auto need a peak-hour
+              factor K (peak hour ÷ model period); enter one below to unlock them. Auto picks
+              per leg by how far the count is from the model, as NCHRP 765 Table 6-2 does.
             </p>
           </div>
 

@@ -68,11 +68,11 @@ def test_overlap_failure_raises(
 def test_unknown_region_has_no_adapter(project_points_near):
     # Registry dispatch: an unregistered region fails loud with a ValueError that
     # names the region and lists the available adapters (the "add a region" hint).
-    with pytest.raises(ValueError, match="no adapter registered for region 'MTC'"):
+    with pytest.raises(ValueError, match="no adapter registered for region 'NOPE'"):
         ingest_networks(
             project_points_near,
             [{"role": "base", "scenario_year": 2025, "path": "x.shp"}],
-            region="MTC",
+            region="NOPE",
         )
 
 

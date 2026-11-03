@@ -176,7 +176,7 @@ export default function F4_FutureResults() {
       <button type="button" className="di-fc-cite" onClick={() => setShowProv((v) => !v)}>
         <Info size={13} />
         <span>
-          NCHRP 765 ({methodLabel}) · SANDAG · {fc.baseYear || 'base'} → {fc.horizonYear || 'horizon'}
+          NCHRP 765 ({methodLabel}) · {fc.region === 'MTC' ? 'MTC Bay Area' : 'SANDAG'} · {fc.baseYear || 'base'} → {fc.horizonYear || 'horizon'}
           {' · '}K={kValid ? Number(kRaw) : '—'}
         </span>
         <span className="di-fc-cite__toggle">{showProv ? 'Hide provenance' : 'Show provenance'}</span>

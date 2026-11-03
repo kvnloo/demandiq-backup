@@ -67,6 +67,9 @@ export function buildRunPayload({ snap, settings, scenarioFactor = null }) {
     refine_method: refineMethod,
     peak_hour_factor: kValid ? Number(kRaw) : null,
     manual_targets,
+    // Analysis years: the backend interpolates the model runs to these.
+    count_year: fc.baseYear ? Number(fc.baseYear) : null,
+    horizon_year: fc.horizonYear ? Number(fc.horizonYear) : null,
   }
   // Scenario demand-reduction factor — the engineer's mitigation ASSUMPTION,
   // applied to the forecast volumes. Only added when set; the tool never
