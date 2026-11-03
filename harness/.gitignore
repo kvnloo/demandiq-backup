@@ -8,3 +8,4 @@ runs/
 failures/
 __pycache__/
 forecast_scores.csv
+method_compare.csv
