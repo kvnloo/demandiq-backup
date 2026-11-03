@@ -24,7 +24,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 
 from forecasting.contract import NetworkLayer, Period
-from forecasting.ingest import ingest_networks, SANDAG_DATA_DIR
+from forecasting.ingest import ADAPTERS, FILE_REGIONS, ingest_networks, SANDAG_DATA_DIR
 from forecasting.matcher import match_network_to_legs
 from forecasting.refinement import refine_corridor
 from forecasting.pass1 import forecast_corridor
@@ -72,6 +72,10 @@ def ingest_match(payload: dict):
     if not isinstance(networks, list) or not networks:
         raise HTTPException(status_code=400, detail="networks must be a non-empty list")
 
+    region = payload.get("region", "SANDAG")
+    if region not in ADAPTERS:
+        raise HTTPException(status_code=400, detail=f"unknown region {region!r} (available: {sorted(ADAPTERS)})")
+
     # Resolve each network file to a BASENAME under the server's SANDAG data dir.
     # Clients send a filename (e.g. "hwyLoad.shp"); directory parts are stripped,
     # so a path can never escape data/sandag and resolution is independent of the
@@ -83,7 +87,9 @@ def ingest_match(payload: dict):
             raise HTTPException(status_code=400, detail="each network must be an object")
         spec = dict(n)
         raw = n.get("path")
-        if raw is not None:
+        if region not in FILE_REGIONS:
+            spec.pop("path", None)            # live-service regions never take a client path
+        elif raw is not None:
             resolved = (data_root / Path(str(raw)).name).resolve()
             if not str(resolved).startswith(str(data_root)):
                 raise HTTPException(status_code=400,
@@ -97,7 +103,7 @@ def ingest_match(payload: dict):
         raise HTTPException(status_code=400, detail="filter_radius_ft must be numeric")
 
     try:
-        layers = ingest_networks(intersections, norm_networks, filter_radius_ft=radius)
+        layers = ingest_networks(intersections, norm_networks, region=region, filter_radius_ft=radius)
     except ModuleNotFoundError:
         raise HTTPException(
             status_code=503,
