@@ -76,10 +76,11 @@ def test_peak_hour_vmt_existing_future_delta():
 
 # ── B(daily a). Daily from data — count-anchored ratio, NO asterisk ───────────
 def test_daily_from_data_no_asterisk():
-    # ratio = Σtotal_flow / Σ(ab_am+ba_am) = 20000 / 4000 = 5.0
-    c = _run()["corridor"]
-    assert c["daily_existing_vmt"] == pytest.approx(9000.0)     # 1800 × 5
-    assert c["daily_future_vmt"] == pytest.approx(13500.0)      # 2700 × 5
+    # daily ÷ period = Σtotal_flow / Σ(ab_am+ba_am) = 20000 / 4000 = 5.0; the AM
+    # flow is a multi-hour period, so daily ÷ peak hour = 5.0 ÷ K (K = 0.25) = 20
+    c = _run(peak_hour_factor=0.25)["corridor"]
+    assert c["daily_existing_vmt"] == pytest.approx(36000.0)    # 1800 × 20
+    assert c["daily_future_vmt"] == pytest.approx(54000.0)      # 2700 × 20
     assert c["daily_estimated"] is False
     assert c["expansion_factor"] is None
 
@@ -183,7 +184,7 @@ def test_scenario_factor_out_of_range_raises():
 
 
 def test_scenario_daily_inherits_data_derived_no_asterisk():
-    sc = _run(scenario_factor=0.10)["scenario"]
+    sc = _run(scenario_factor=0.10, peak_hour_factor=0.25)["scenario"]
     assert sc["daily_estimated"] is False                    # data-derived ratio
     assert sc["expansion_factor"] is None
     assert sc["daily_vmt"] == pytest.approx(sc["daily_baseline_vmt"] * 0.90)

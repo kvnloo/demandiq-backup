@@ -34,6 +34,7 @@ adapter, so importing this module costs the lean app nothing.
 
 import hashlib
 import json
+import math
 import statistics
 import urllib.error
 import urllib.parse
@@ -182,9 +183,10 @@ def ingest_hpms(source, scenario_year, project_intersections_4326, *, filter_rad
     to_ll = Transformer.from_crs(3310, 4326, always_xy=True)
     lngs, lats = [p[0] for p in pts], [p[1] for p in pts]
     pad = (filter_radius_ft + 300) / 364_000                         # ≈ ft → degrees
-    gpad = GROWTH_RADIUS_MI / 69.0
+    gpad = GROWTH_RADIUS_MI / 69.0                                    # degrees of latitude
+    gpad_x = GROWTH_RADIUS_MI / (69.172 * math.cos(math.radians(max(abs(l) for l in lats))))  # longitude degrees shrink with cos(lat)
     near = _load(source, False, (min(lngs) - pad, min(lats) - pad, max(lngs) + pad, max(lats) + pad))
-    wide = _load(source, True, (min(lngs) - gpad, min(lats) - gpad, max(lngs) + gpad, max(lats) + gpad))
+    wide = _load(source, True, (min(lngs) - gpad_x, min(lats) - gpad, max(lngs) + gpad_x, max(lats) + gpad))
 
     def to_line(geom):
         parts = [[to_m.transform(x, y) for x, y in seg]

@@ -82,14 +82,19 @@ def corridor_groups(nums, links, coords):
         if len(axes) != 1:
             raise ValueError("the trip-table methods need one corridor direction (all links EB/WB or all NB/SB).")
         axis = axes.pop()
-        key = (lambda k: coords[k]["lng"]) if axis == "EB/WB" else (lambda k: coords[k]["lat"])
-        if all(k in coords for k in comp):
-            order = sorted(comp, key=key)
-        else:                                 # no coordinates: walk the chain from an end
-            order, prev = [next(x for x in comp if len(adj[x]) == 1)], None
-            while len(order) < len(comp):
-                nxt = next(iter(adj[order[-1]] - {prev}))
-                prev = order[-1]; order.append(nxt)
+        # Walk the chain along its links; coordinates (else intersection numbers,
+        # the balancer's fallback) only decide which end is west / south.
+        order, prev = [min(x for x in comp if len(adj[x]) == 1)], None
+        while len(order) < len(comp):
+            nxt = next(iter(adj[order[-1]] - {prev}))
+            prev = order[-1]; order.append(nxt)
+        ax = "lng" if axis == "EB/WB" else "lat"
+        a_, b_ = coords.get(order[0], {}).get(ax), coords.get(order[-1], {}).get(ax)
+        if a_ is not None and b_ is not None and abs(a_ - b_) > 1e-9:
+            if a_ > b_:
+                order.reverse()
+        elif order[0] > order[-1]:
+            order.reverse()
         groups.append((order, axis))
     return groups
 
@@ -174,15 +179,20 @@ def _assign(trips, x):
     return vol
 
 
-def _targets(rr, base):
+def _targets(rr, base, manual=None):
     """Forecast approach (inbound) and exit (outbound) totals per leg from the
-    link step; pending legs held flat at the count (as Pass 1 does)."""
+    link step; pending legs take the engineer's manual target, else are held
+    flat at the count (as Pass 1 does)."""
     tin, tout, flags = {}, {}, []
+    manual = manual or {}
     for d, leg in (rr["approaches"] or {}).items():
         if leg.get("status") == "absent":
             continue
         if leg.get("status") == "bound":
             tin[d], tout[d] = leg["inbound"]["refined"], leg["outbound"]["refined"]
+        elif d in manual:
+            tin[d], tout[d] = float(manual[d]["inbound"]), float(manual[d]["outbound"])
+            flags.append({"code": "OD-PENDING-MANUAL", "message": f"{d} leg used the engineer's manual target."})
         else:
             tin[d] = _sum(base, DIRECTION_SPEC[d]["approach"])
             tout[d] = _sum(base, DIRECTION_SPEC[OPPOSITE[d]]["outflow"])
@@ -191,7 +201,8 @@ def _targets(rr, base):
     return tin, tout, flags
 
 
-def forecast_trips(refinement_results, base_tmcs, links, coords, *, method="fratar", band=0.05):
+def forecast_trips(refinement_results, base_tmcs, links, coords, *, method="fratar", band=0.05,
+                   manual_targets=None):
     """Trip-table forecast for one period.
 
     refinement_results: link-step output (refine_corridor or uniform_growth).
@@ -233,7 +244,7 @@ def forecast_trips(refinement_results, base_tmcs, links, coords, *, method="frat
         # 2. future trip table
         tin, tout, flags = {}, {}, list(base_flags)
         for n in order:
-            ti, to, fl = _targets(rr_by[n], counts[n])
+            ti, to, fl = _targets(rr_by[n], counts[n], (manual_targets or {}).get(n))
             tin[n], tout[n] = ti, to
             flags += fl
         fm, fb = {}, {}
