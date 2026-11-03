@@ -46,6 +46,7 @@ def _serialize_pass2(p2):
     """JSON-safe view of balance_nchrp's result (resolved_links is tuple-keyed)."""
     return {
         "balanced": _str_keys(p2.get("balanced", {})),
+        "balanced_unrounded": _str_keys(p2.get("balanced_unrounded", {})),
         "link_conservation": p2.get("link_conservation", []),
         "iterations": _str_keys(p2.get("iterations", {})),
         "converged": _str_keys(p2.get("converged", {})),
@@ -149,6 +150,16 @@ def run_forecast(payload: dict):
     coords = _int_keys(payload.get("coords") or {})
     balanced = payload.get("balanced_tmcs") or {}
     periods = payload.get("periods") or ["AM", "PM"]
+    # Analysis years (count → horizon). Both given → model volumes are interpolated
+    # to them; either missing → the model years are used as-is.
+    years = {}
+    for key in ("count_year", "horizon_year"):
+        v = payload.get(key)
+        if v not in (None, ""):
+            try:
+                years[key] = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"{key} must be a year")
 
     manual = payload.get("manual_targets")
     manual_targets = {int(k): v for k, v in manual.items()} if manual else None
@@ -180,11 +191,12 @@ def run_forecast(payload: dict):
         tmcs = _int_keys(balanced.get(p) or {})
         try:
             rr = refine_corridor(matches, base_layer, horizon_layer, tmcs, period,
-                                 peak_hour_factor=peak_hour_factor, method=refine_method)
+                                 peak_hour_factor=peak_hour_factor, method=refine_method,
+                                 **years)
             futures, p1_meta = forecast_corridor(rr, tmcs, manual_targets=manual_targets)
             p2 = balance_future(futures, links, coords=coords, method=method)
             vmt = corridor_vmt(links, coords, matches, base_layer, horizon_layer,
-                               tmcs, p2["balanced"], rr, period,
+                               tmcs, p2["balanced_unrounded"], rr, period,
                                expansion_factor=vmt_factor,
                                scenario_factor=scenario_factor)
         except ValueError as e:

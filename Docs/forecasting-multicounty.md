@@ -178,3 +178,29 @@ It must:
 
 Then **register it** in `ingest.py`'s adapter registry under the region key. No
 other engine code should need to change for a SANDAG-shaped model.
+
+## Regions now registered
+
+- **SANDAG** — San Diego; engineer names the `hwyLoad` file under `data/sandag/`.
+- **MTC** — Bay Area, all nine counties. MTC Travel Model One, Plan Bay Area 2050
+  runs: 2015 base (`pba50-2015-TM152-IPA-17`) and 2050 Final Blueprint
+  (`pba50-2050-TM152-FBP-Plus-24`), file `avgload5period.zip` from MTC's public
+  Box shares (mtcdrive.box.com/v/<name>). Unzip to `data/mtc/<year>/`
+  (gitignored, ~100 MB each). The server picks the file by model year; clients
+  never send a path. TM1 periods: AM 6–10 am, PM 3–7 pm.
+- **HPMS_CA** — statewide FHWA HPMS, backend only. Its `future_aadt` is a flat
+  ~×1.105 statewide factor, not a model forecast — don't present it as one.
+
+## Method rules (NCHRP 255/765), as built
+
+- Model volumes are interpolated per link to the count year and the horizon year
+  before growth is computed (NCHRP 765 §9.2). Horizon may be count year … +50;
+  more than 5 years past the model runs is flagged as extrapolated.
+- Declines are allowed with no floor (user decision); they are flagged, as is
+  growth ≥ 3 %/yr.
+- Negative difference result → ratio result (NCHRP 255 p. 50). Zero model base
+  with K → difference (p. 54). Lane change > 25 % → flag (p. 54).
+- `nchrp765` method picks per leg by count ÷ model (Table 6-2, limits 0.5 / 2.0).
+- Pass 1 evens traffic in = out before Furness (NCHRP 255 p. 133).
+- Reported forecasts round per NCHRP 765 Table 4-8 (10 / 50 / 100 / 500 / 1,000);
+  `balanced_unrounded` keeps the 5-vph values, which VMT uses.

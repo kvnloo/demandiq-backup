@@ -176,3 +176,12 @@ def test_real_pipeline_identity_growth():
     assert 1 in futures
     # Identity growth (+ held-flat pending legs) → matrix ≈ base; total preserved.
     assert _mv(futures[1], _ALL12) == pytest.approx(1200.0, rel=0.05)
+
+
+def test_in_and_out_evened_before_furness():
+    from forecasting.pass1 import forecast_intersection
+    legs = {d: {"status": "bound", "inbound": {"refined": i}, "outbound": {"refined": o}}
+            for d, i, o in (("NB", 700, 500), ("SB", 600, 500), ("EB", 400, 300), ("WB", 300, 300))}
+    future, meta = forecast_intersection(COUNTS[1], legs)
+    assert any(f["code"] == "PASS1-INOUT-EVENED" for f in meta["flags"])
+    assert sum(future[m] for m in COUNTS[1]) == pytest.approx(0.5 * (2000 + 1600), rel=0.01)

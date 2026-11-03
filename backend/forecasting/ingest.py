@@ -25,6 +25,7 @@ corrupting the refinement join.
 from pathlib import Path
 
 from forecasting.adapters.hpms import ingest_hpms
+from forecasting.adapters.mtc import ingest_mtc
 from forecasting.adapters.sandag import ingest_sandag
 
 # ── Region adapter registry ───────────────────────────────────────────────────
@@ -42,6 +43,7 @@ from forecasting.adapters.sandag import ingest_sandag
 ADAPTERS = {
     "SANDAG": ingest_sandag,
     "HPMS_CA": ingest_hpms,
+    "MTC": ingest_mtc,        # Bay Area; file picked server-side by model year
 }
 # Regions whose network is a server-side file the engineer names; the others
 # read a public service and take no path.

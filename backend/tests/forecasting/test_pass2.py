@@ -165,3 +165,16 @@ def test_real_growth_full_pipeline(tmp_path):
     futures, _ = forecast_corridor(rr, counts)
     res = balance_future(futures, [], coords={1: {"lat": lat, "lng": lng}})
     assert max(res["balanced"][1].values()) > 100
+
+
+def test_round_forecast_nchrp765_table():
+    from forecasting.pass2 import round_forecast
+    assert [round_forecast(v) for v in (3, 63, 847, 1237, 12340, 0)] == [0, 60, 850, 1200, 12500, 0]
+
+
+def test_pass2_reports_nchrp765_rounding_keeps_unrounded():
+    from forecasting.pass2 import round_forecast
+    res = balance_future(_two_int_futures(), _LINKS, coords=_COORDS)
+    for n, vols in res["balanced"].items():
+        for m, v in vols.items():
+            assert v == round_forecast(res["balanced_unrounded"][n][m])

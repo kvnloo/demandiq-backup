@@ -64,10 +64,11 @@ export default function F2_NetworkMatch() {
   )
 
   const networks = fc.networks ?? []
+  const modelName = fc.region === 'MTC' ? 'Bay Area (MTC)' : 'SANDAG'
   const canPull =
     networks.length > 0 &&
     networks.some((n) => n.role === 'base') &&
-    networks.every((n) => n.path && n.scenarioYear !== '' && n.scenarioYear != null)
+    networks.every((n) => (fc.region === 'MTC' || n.path) && n.scenarioYear !== '' && n.scenarioYear != null)
 
   const pull = async () => {
     setStatus('loading')
@@ -77,6 +78,7 @@ export default function F2_NetworkMatch() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          region: fc.region || 'SANDAG',
           intersections: getIntersections().map((it) => ({
             num: it.num, lat: it.lat, lng: it.lng, approaches: it.approaches,
           })),
@@ -140,7 +142,7 @@ export default function F2_NetworkMatch() {
         <div className="di-eyebrow">Forecasting · Step 2</div>
         <h1 className="di-h1" style={{ marginBottom: 4 }}>Network match</h1>
         <p className="di-subtitle" style={{ marginBottom: 12 }}>
-          Pull the SANDAG network around your intersections and confirm which model
+          Pull the {modelName} network around your intersections and confirm which model
           link feeds each leg. Green is matched, amber needs a pick, red is off-network.
         </p>
 
@@ -174,7 +176,7 @@ export default function F2_NetworkMatch() {
           <DownloadCloud size={28} style={{ color: 'var(--signal-amber)' }} />
           <p>
             DemandIQ filters the {Number(baseLayer?.links?.length || 0) || '40,720'}-link
-            SANDAG network to a few hundred feet around your {intersections.length}{' '}
+            {modelName} network to a few hundred feet around your {intersections.length}{' '}
             intersection{intersections.length === 1 ? '' : 's'}, then matches each leg.
           </p>
           <button
@@ -186,7 +188,7 @@ export default function F2_NetworkMatch() {
             {status === 'loading' ? (
               <><Loader2 size={15} className="di-spin" /> Pulling network…</>
             ) : (
-              <><DownloadCloud size={15} /> Pull SANDAG network</>
+              <><DownloadCloud size={15} /> Pull {modelName} network</>
             )}
           </button>
         </div>
