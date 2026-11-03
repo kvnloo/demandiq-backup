@@ -7,3 +7,4 @@ last_session.json
 runs/
 failures/
 __pycache__/
+forecast_scores.csv

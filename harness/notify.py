@@ -88,6 +88,7 @@ class SessionNotifier:
         self.session_runs = 0
         self.verdicts = {'PASS': 0, 'MARGINAL': 0, 'FAIL': 0}
         self.tier_stats = {}          # tier → {'runs': n, 'pass': n}
+        self.forecast_rows = []       # forecast-track rows (tiers FA/FB/FC) this session
         self.category_counts = {}
         self.signature_counts = {}
         self.summary_sent = False
@@ -120,6 +121,8 @@ class SessionNotifier:
             self.session_runs += 1
             self.verdicts[row['verdict']] = self.verdicts.get(row['verdict'], 0) + 1
             self.observe_tier(row)
+            if str(row.get('tier', '')).startswith('F'):
+                self.forecast_rows.append({'tier': row['tier'], 'verdict': row['verdict']})
             if row['verdict'] == 'FAIL':
                 cat = row.get('failure_category') or ''
                 if cat:
@@ -190,7 +193,16 @@ class SessionNotifier:
                 f"({v.get('PASS', 0)}P/{v.get('MARGINAL', 0)}M/{v.get('FAIL', 0)}F)"
                 + (f'\n{tiers}' if tiers else '')
                 + (f'\nFails: {cats}' if cats else '')
-                + (f'\nTop signature: {top}' if top else ''))
+                + (f'\nTop signature: {top}' if top else '')
+                + ''.join('\n' + line for line in self._forecast_lines()))
+
+    def _forecast_lines(self):
+        try:
+            from .forecast_runner import checkpoint_lines
+            return checkpoint_lines(self.forecast_rows)
+        except Exception as e:   # noqa: BLE001 — a summary line must never break a send
+            _log_error('forecast_lines', e)
+            return []
 
     def _new_signature_text(self, row):
         return ('🆕 New failure signature '
