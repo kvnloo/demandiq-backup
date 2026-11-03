@@ -10,6 +10,7 @@ the Examiner ledger. Writes method_compare.csv next to this file.
 
 import argparse
 import csv
+import json
 import math
 import statistics as st
 
@@ -20,6 +21,7 @@ from .nchrp_math import STANDARD_MOVEMENTS, geh
 
 LINK = fp.LINK_METHODS + fp.EXTRA_LINK_METHODS
 OUT = fr.scorekeeper.HARNESS_ROOT / 'method_compare.csv'
+VOLS = fr.scorekeeper.HARNESS_ROOT / 'method_compare_movements.json'   # per-movement answers, for method_anomalies
 
 
 def score(world, am):
@@ -40,17 +42,21 @@ def score(world, am):
 
 
 def run(seeds, tiers, url, start):
-    rows = []
+    rows, vols = [], {}
     for tier in tiers:
         for seed in range(start, start + seeds):
             w = fp.generate(seed, tier)
             counts = fr._balance(w, url)
+            vols[f'{tier}:{seed}'] = {'scenario': w['scenario'], 'n': w['n'], 'counts': counts,
+                                      'truth': w['truth_future'], 'methods': {}}
             for lm in LINK:
                 for tm in fp.TURN_METHODS:
                     p = {**fp.forecast_payload(w, counts), 'refine_method': lm, 'turn_method': tm}
                     am, _ = operate._post_json(f'{url}/forecast/run', p)
                     rows.append({'tier': tier, 'seed': seed, 'scenario': w['scenario'],
                                  'link': lm, 'turn': tm, **score(w, am['AM'])})
+                    vols[f'{tier}:{seed}']['methods'][f'{lm}|{tm}'] = am['AM']['pass2']['balanced']
+    VOLS.write_text(json.dumps(vols))
     return rows
 
 
