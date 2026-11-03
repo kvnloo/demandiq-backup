@@ -16,7 +16,8 @@ World (straight east–west corridor, intersections 1..n, numbered west → east
 Tiers (the 'tier' column; F = forecast track):
   FA  perfect model: model ∝ truth, counts exact. The link step has ONE right
       answer — the true future road volumes — and the tool must hit it.
-  FB  realistic: model off ±25 % per link, growth off ±8 %, counts off ±5 %
+  FB  realistic: model off ±25 % per link (half as a share, half as a fixed
+      amount), growth off ±8 %, counts off ±5 %
       (balanced through the tool's own /balance-nchrp first).
   FC  hard: FB plus declines, a new development, model years far from the
       count/horizon years, 3–7 intersections.
@@ -157,8 +158,14 @@ def generate(seed, tier='FB'):
         slope = (v_h - v_c) / (HORIZON - COUNT_YEAR)
         mb = max(1.0, v_c + slope * (yb - COUNT_YEAR)) / K
         mf = max(1.0, v_c + slope * (yf - COUNT_YEAR)) / K
-        b, g = bias.setdefault(key, (1.0, 1.0) if tier == 'FA' else
-                               (math.exp(rng.gauss(0, 0.25)), math.exp(rng.gauss(0, 0.08))))
+        # half the links are off by a SHARE (ratio cancels it), half by a fixed
+        # AMOUNT in every year (difference cancels it) — so neither method wins by construction
+        b, g, add = bias.setdefault(key, (1.0, 1.0, False) if tier == 'FA' else
+                                    (math.exp(rng.gauss(0, 0.25)), math.exp(rng.gauss(0, 0.08)),
+                                     rng.random() < 0.5))
+        if add:
+            off = (b - 1) * mb
+            return max(1.0, mb + off), max(1.0, (mf + off) * g)
         return mb * b, mf * b * g
     bias = {}
     for i, d in _legs(n):
