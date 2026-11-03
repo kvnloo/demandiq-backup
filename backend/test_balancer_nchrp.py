@@ -857,23 +857,25 @@ def test_f2_geometry_root_attached_to_link_delta_messages():
     assert {geom[0]['fromNum'], geom[0]['toNum']} == {2, 3}
 
     link_deltas = [f for f in body['qc_flags'] if f['check'] == 'NCHRP-LINK-DELTA']
-    # The 2↔3 cascade should produce at least one NCHRP-LINK-DELTA on a link
-    # touching one of {2, 3}; that flag must reference the geometry root.
-    cascaded = [
-        f for f in link_deltas
-        if 'GEOMETRY-FALLBACK at Int 2↔3' in f['message']
-    ]
-    assert cascaded, (
-        f"expected NCHRP-LINK-DELTA on a 2↔3-touching link to name the "
-        f"GEOMETRY-FALLBACK root; got messages: {[f['message'] for f in link_deltas]}"
-    )
-    # The cascaded flag must NOT carry the generic raw-floor message
+    # Every balancing step now shares one orientation rule (balancer._orient), so
+    # the coincident pair no longer cascades into deltas: the 2↔3 link conserves.
+    # Any delta that still touches 2 or 3 must name the geometry root.
+    cons = {(c['fromNum'], c['toNum']): c for c in body['link_conservation']['AM']} \
+        if isinstance(body.get('link_conservation'), dict) else {}
+    for (u, d), c in cons.items():
+        if {u, d} == {2, 3}:
+            assert abs(c['delta']) <= 0.5, f"2↔3 link should conserve after the fallback fix: {c}"
+    touching = [f for f in link_deltas if {f.get('fromNum'), f.get('toNum')} & {2, 3}]
+    cascaded = [f for f in touching if 'GEOMETRY-FALLBACK at Int 2↔3' in f['message']]
+    assert len(cascaded) == len(touching), (
+        f"every NCHRP-LINK-DELTA touching Int 2/3 must name the GEOMETRY-FALLBACK root; got "
+        f"{[f['message'] for f in touching]}")
     for f in cascaded:
         assert 'raw-floor clipping' not in f['message'], (
             f"geometry-root flag should drop the generic raw-floor hint: {f['message']}"
         )
     print(f"  test_f2_geometry_root_attached_to_link_delta_messages: PASS "
-          f"({len(cascaded)} NCHRP-LINK-DELTA flag(s) name the geometry root)")
+          f"(fallback consistent; {len(cascaded)} delta flag(s), all name the root)")
 
 
 def test_f3_source_outlier_flag_fires_on_typo():

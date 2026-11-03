@@ -42,7 +42,7 @@ from balancer import DIRECTION_SPEC
 from forecasting.contract import DirectionalFlow, NetworkLayer, NetworkLink, Period
 from forecasting.od import OPPOSITE, _paths, _assign, forecast_trips
 from forecasting.pass1 import forecast_corridor
-from forecasting.pass2 import balance_future
+from forecasting.pass2 import balance_future, round_forecast
 from forecasting.refinement import refine_corridor
 from forecasting.trend import fit_trend, uniform_growth
 
@@ -110,10 +110,13 @@ def build_world(seed, scenario):
     bias = {}
     shared = {d: (math.exp(rng.gauss(0, 0.25)), math.exp(rng.gauss(0, 0.08))) for d in ("eb", "wb")}
     def model(v, key, future):
-        if scenario == "shared_error" and key[0].startswith("C"):
+        if scenario == "shared_error" and (key[0].startswith("C") or key[0] in ("W", "E")):
             # the model is wrong the same way all along the main street — its level
             # AND its growth error — instead of link by link (common in practice)
-            lvl, grow = shared[key[1]]
+            # end links: inbound W / outbound E run eastbound, the others westbound
+            d = key[1] if key[0].startswith("C") else (
+                "eb" if (key[0], key[1]) in (("W", "in"), ("E", "out")) else "wb")
+            lvl, grow = shared[d]
             b = bias.setdefault(key, lvl * math.exp(rng.gauss(0, 0.03)))
             return v / K * b * (grow * math.exp(rng.gauss(0, 0.02)) if future else 1.0)
         b = bias.setdefault(key, math.exp(rng.gauss(0, 0.25)))
@@ -184,10 +187,11 @@ def run_method(w, link_m, turn_m, band=0.05):
                              peak_hour_factor=K, method=link_m, count_year=COUNT_YEAR, horizon_year=HORIZON)
     if turn_m == "furness":
         fut, _ = forecast_corridor(rr, tmcs)
-        fut = balance_future(fut, w["links"], coords=w["coords"])["balanced_unrounded"]   # same precision as the trip methods
+        fut = balance_future(fut, w["links"], coords=w["coords"])["balanced_unrounded"]
     else:
         fut, _, _ = forecast_trips(rr, tmcs, w["links"], w["coords"], method=turn_m, band=band)
-    return fut
+    # score what the engineer gets: every method through the same final rounding
+    return {n: {m: round_forecast(v) for m, v in mv.items()} for n, mv in fut.items()}
 
 
 def score(fut, truth):

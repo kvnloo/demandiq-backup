@@ -28,6 +28,7 @@ from balancer import resolve_link_volumes
 from forecasting.geo import haversine_mi, polyline_length_mi
 
 DIRS = ("NB", "SB", "EB", "WB")
+PEAK_HOUR_FLOW_REGIONS = {"HPMS_CA"}
 
 
 def _link_len_mi(link):
@@ -107,7 +108,7 @@ def _refinement_has_held(refinement):
 
 def corridor_vmt(corridor_links, coords, match_results, base_layer, horizon_layer,
                  existing_balanced, future_balanced, refinement, period, *,
-                 expansion_factor=None, scenario_factor=None):
+                 expansion_factor=None, scenario_factor=None, peak_hour_factor=None):
     """Corridor VMT for one period. Returns {period, unit, corridor, links, scenario}.
 
     corridor_links: [{fromNum, toNum, direction}] (S2 corridor segments).
@@ -136,6 +137,9 @@ def corridor_vmt(corridor_links, coords, match_results, base_layer, horizon_laye
     net = {"existing_vmt": 0.0, "future_vmt": 0.0, "length_mi": 0.0}
     seg_daily = []          # (ex_daily, fu_daily, source) per segment, or None
     gap = _refinement_has_held(refinement)
+    # HPMS flows are already peak-hour (AADT × K); MPO model flows are period totals.
+    period_flows = base_layer.region not in PEAK_HOUR_FLOW_REGIONS
+    needs_k = False
 
     for L in corridor_links:
         a, b = int(L["fromNum"]), int(L["toNum"])
@@ -160,6 +164,15 @@ def corridor_vmt(corridor_links, coords, match_results, base_layer, horizon_laye
         # Daily: data-derived ratio per year, else engineer factor, else omit.
         r_base = _chain_daily_ratio([base_by_id[i] for i in chain_ids if i in base_by_id], period) if chain_ids else None
         r_hor = _chain_daily_ratio([hor_by_id[i] for i in chain_ids if i in hor_by_id], period) if chain_ids else None
+        if period_flows and r_base is not None:
+            # model flows are multi-hour PERIOD totals but VMT volumes are one peak
+            # hour: daily ÷ peak hour = (daily ÷ period) ÷ K
+            if peak_hour_factor:
+                r_base = r_base / peak_hour_factor
+                r_hor = r_hor / peak_hour_factor if r_hor is not None else None
+            else:
+                r_base = r_hor = None
+                needs_k = True
         if r_base is not None and r_hor is not None:
             seg_daily.append((ex_vmt * r_base, fu_vmt * r_hor, "data"))
         elif expansion_factor:
@@ -187,6 +200,7 @@ def corridor_vmt(corridor_links, coords, match_results, base_layer, horizon_laye
         "gap_flag": gap,
         "daily_existing_vmt": None, "daily_future_vmt": None, "daily_delta": None,
         "daily_estimated": False, "expansion_factor": None,
+        "daily_needs_k": needs_k and not all(s is not None for s in seg_daily),
     }
     # Daily reported only when EVERY segment resolved a daily value.
     if seg_daily and all(s is not None for s in seg_daily):
@@ -214,7 +228,7 @@ def corridor_vmt(corridor_links, coords, match_results, base_layer, horizon_laye
                   for i, mvs in future_balanced.items()}
         s = corridor_vmt(corridor_links, coords, match_results, base_layer,
                          horizon_layer, existing_balanced, scaled, refinement, period,
-                         expansion_factor=expansion_factor)
+                         expansion_factor=expansion_factor, peak_hour_factor=peak_hour_factor)
         sc = s["corridor"]
         base_fut = corridor["future_vmt"]
         delta = round(sc["future_vmt"] - base_fut, 1)

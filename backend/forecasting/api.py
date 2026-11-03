@@ -18,6 +18,7 @@ Validation mirrors app.py's style: dict payloads + HTTPException. Round-tripped
 layers are validated through the NetworkLayer Pydantic model.
 """
 
+import math
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -37,6 +38,7 @@ router = APIRouter()
 
 # Link step without a travel model; turn/corridor step choices.
 NO_MODEL_METHODS = {"trend", "rate"}
+LINK_METHODS = {"ratio", "difference", "combined", "weighted", "modified_average", "nchrp765", "odot"}
 TURN_METHODS = {"furness", "fratar", "fuzzy"}
 
 
@@ -144,6 +146,9 @@ def run_forecast(payload: dict):
         band = float(payload.get("fuzzy_band_pct", 5)) / 100
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="fuzzy_band_pct must be numeric")
+    if refine_method not in LINK_METHODS | NO_MODEL_METHODS:
+        raise HTTPException(status_code=400, detail=(
+            f"refine_method must be one of {sorted(LINK_METHODS | NO_MODEL_METHODS)}"))
     uses_model = refine_method not in NO_MODEL_METHODS
 
     layers_in = payload.get("layers") or {}
@@ -164,6 +169,16 @@ def run_forecast(payload: dict):
     links = payload.get("links") or []
     method = payload.get("method", "larger")
     peak_hour_factor = payload.get("peak_hour_factor")
+    if peak_hour_factor not in (None, ""):
+        try:
+            peak_hour_factor = float(peak_hour_factor)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="peak_hour_factor must be a number")
+        # K = peak hour ÷ model period, so a share: 0 < K ≤ 1
+        if not (math.isfinite(peak_hour_factor) and 0 < peak_hour_factor <= 1):
+            raise HTTPException(status_code=400, detail="peak_hour_factor must be between 0 and 1 (peak hour ÷ model period)")
+    else:
+        peak_hour_factor = None
     coords = _int_keys(payload.get("coords") or {})
     balanced = payload.get("balanced_tmcs") or {}
     periods = payload.get("periods") or ["AM", "PM"]
@@ -178,6 +193,9 @@ def run_forecast(payload: dict):
             except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail=f"{key} must be a year")
 
+    if len(years) == 1:
+        raise HTTPException(status_code=400, detail="give both count_year and horizon_year, or neither")
+
     growth = None                      # no-model link step: (factor, label, annual rate, notes)
     if not uses_model:
         if len(years) < 2:
@@ -187,7 +205,10 @@ def run_forecast(payload: dict):
             raise HTTPException(status_code=400, detail="horizon year must be 0–50 years after the count year")
         try:
             if refine_method == "trend":
-                t = fit_trend(payload.get("trend_points") or [], years["count_year"])
+                pts = payload.get("trend_points") or []
+                if not all(isinstance(p, dict) and "year" in p and "volume" in p for p in pts):
+                    raise ValueError("each past count needs a year and a volume")
+                t = fit_trend(pts, years["count_year"])
                 notes = [f"{t['kind']} trend from {t['n']} counts {t['years'][0]}–{t['years'][1]}: "
                          f"{t['annual_rate']:+.2%}/yr, R² {t['r2']:.2f}"]
                 if t["r2"] < 0.75:
@@ -197,6 +218,8 @@ def run_forecast(payload: dict):
                 if payload.get("growth_rate_pct") in (None, ""):
                     raise ValueError("enter a growth rate (% per year; negative for a decline)")
                 rate = float(payload.get("growth_rate_pct")) / 100
+                if not math.isfinite(rate):
+                    raise ValueError("growth rate must be a number (% per year)")
                 growth = (1 + rate * n, "growth rate entered", rate, [f"{rate:+.2%}/yr entered by the engineer"])
         except (TypeError, ValueError) as e:
             raise HTTPException(status_code=400, detail=str(e) or "growth_rate_pct must be numeric")
@@ -243,7 +266,8 @@ def run_forecast(payload: dict):
                 p2 = balance_future(futures, links, coords=coords, method=method)
             else:
                 futures, p1_meta, trips = forecast_trips(rr, tmcs, links, coords,
-                                                         method=turn_method, band=band)
+                                                         method=turn_method, band=band,
+                                                         manual_targets=manual_targets)
                 # trips already agree across the corridor — only rounding remains
                 p2 = {"balanced_unrounded": futures, "method": turn_method,
                       "converged": {n: m["converged"] for n, m in p1_meta.items()},
@@ -251,7 +275,8 @@ def run_forecast(payload: dict):
                       "balanced": {n: {m: round_forecast(v) for m, v in mv.items()} for n, mv in futures.items()}}
             vmt = (corridor_vmt(links, coords, matches, base_layer, horizon_layer,
                                 tmcs, p2["balanced_unrounded"], rr, period,
-                                expansion_factor=vmt_factor, scenario_factor=scenario_factor)
+                                expansion_factor=vmt_factor, scenario_factor=scenario_factor,
+                                peak_hour_factor=peak_hour_factor)
                    if uses_model else None)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))

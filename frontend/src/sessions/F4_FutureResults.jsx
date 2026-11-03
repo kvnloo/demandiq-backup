@@ -320,6 +320,9 @@ function VmtPanel({ vmt }) {
         {c.daily_estimated && (
           <span className="di-fc-vmt__warn"> · * daily estimated, expansion factor {c.expansion_factor}</span>
         )}
+        {c.daily_needs_k && (
+          <span className="di-fc-vmt__warn"> · daily VMT needs the peak-hour factor K (step 3)</span>
+        )}
       </div>
     </div>
   )

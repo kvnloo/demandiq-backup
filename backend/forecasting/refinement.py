@@ -288,6 +288,9 @@ def refine_corridor(
         if not count_year <= horizon_year <= count_year + MAX_HORIZON_YEARS:
             raise ValueError(f"horizon year {horizon_year} must be between the count year "
                              f"{count_year} and {count_year + MAX_HORIZON_YEARS}.")
+        if base_layer.scenario_year == horizon_layer.scenario_year:
+            raise ValueError(f"base and horizon networks are the same model year ({base_layer.scenario_year}) "
+                             "— interpolating to the count and forecast years needs two different model years.")
         years = (base_layer.scenario_year, horizon_layer.scenario_year, count_year, horizon_year)
     base_idx = {lk.link_id: lk for lk in base_layer.links}
     horizon_idx = {lk.link_id: lk for lk in horizon_layer.links}

@@ -16,6 +16,7 @@ TESTS=(
   test_line_diagram
   test_e2e_bodger
   test_capture
+  test_balancer_regressions
 )
 
 fails=0
