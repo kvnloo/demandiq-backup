@@ -6,6 +6,7 @@ import { Loader2, Info } from 'lucide-react'
 import { subscribe, getSnapshot, isExistingAnalysisDone, setForecasting } from '../store/projectStore'
 import { buildPayload } from '../lib/diagramPayload'
 import { runForecast } from '../lib/forecastRun'
+import { METHODS } from '../lib/forecastMethods'
 
 import '../styles/forms.css'
 import '../styles/forecasting.css'
@@ -125,7 +126,8 @@ export default function F4_FutureResults() {
 
   const kRaw = fc.settings?.peakHourFactor
   const kValid = kRaw !== '' && kRaw != null && Number(kRaw) > 0
-  const methodLabel = cap(kValid ? (fc.settings?.refineMethod || 'ratio') : 'ratio')
+  const rm = kValid ? (fc.settings?.refineMethod || 'ratio') : 'ratio'
+  const methodLabel = METHODS.find((m) => m.id === rm)?.label ?? cap(rm)
 
   const scenario = results?.[effPeriod]?.vmt?.scenario ?? null
 

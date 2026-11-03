@@ -13,17 +13,12 @@ import { runForecast } from '../lib/forecastRun'
 
 import '../styles/forms.css'
 import '../styles/forecasting.css'
+import { METHODS } from '../lib/forecastMethods'
 
 const DIRS = ['NB', 'SB', 'EB', 'WB']
 const RESOLUTIONS = [
   { id: 'larger', label: 'Larger' },
   { id: 'average', label: 'Average' },
-]
-const METHODS = [
-  { id: 'ratio', label: 'Ratio' },
-  { id: 'difference', label: 'Difference' },
-  { id: 'combined', label: 'Combined' },
-  { id: 'nchrp765', label: 'Auto (NCHRP 765)' },
 ]
 
 function legNeedsReview(leg) {
@@ -157,31 +152,23 @@ export default function F3_RunForecast() {
           {/* ── Refinement method ───────────────────────────────────── */}
           <div className="di-field">
             <label className="di-label">Refinement method</label>
-            <div className="di-pill-group">
-              {METHODS.map((m) => {
-                const locked = m.id !== 'ratio' && !kValid
-                const selected = refineMethod === m.id
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    disabled={locked}
-                    aria-pressed={selected}
-                    className={`di-pill${selected ? ' di-pill--selected' : ''}`}
-                    style={locked ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-                    onClick={() => !locked && update('refineMethod', m.id)}
-                  >
-                    {m.label}
-                  </button>
-                )
-              })}
-            </div>
+            <select
+              className="di-input"
+              value={refineMethod}
+              onChange={(e) => update('refineMethod', e.target.value)}
+              style={{ maxWidth: 360 }}
+              aria-label="Refinement method"
+            >
+              {METHODS.map((m) => (
+                <option key={m.id} value={m.id} disabled={m.id !== 'ratio' && !kValid}>
+                  {m.label}{m.id !== 'ratio' && !kValid ? ' — needs K' : ''}
+                </option>
+              ))}
+            </select>
             <p className="di-help" style={{ lineHeight: 1.5 }}>
-              Ratio is the default because model flows are <strong>period</strong>{' '}
-              volumes (e.g. 6–10 am) while DemandIQ counts are <strong>peak-hour</strong> — the
-              ratio method works either way. Difference, Combined and Auto need a peak-hour
-              factor K (peak hour ÷ model period); enter one below to unlock them. Auto picks
-              per leg by how far the count is from the model, as NCHRP 765 Table 6-2 does.
+              {METHODS.find((m) => m.id === refineMethod)?.help}{' '}
+              Model flows are period volumes (e.g. 6–10 am) and counts are one peak hour, so every
+              method except Ratio needs the peak-hour factor K below (peak hour ÷ model period).
             </p>
           </div>
 

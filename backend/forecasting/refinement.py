@@ -41,6 +41,8 @@ NCHRP765_MAX_RAT = 2.0
 HIGH_GROWTH_PER_YEAR = 0.03
 # NCHRP 255 p. 54: base-year error doesn't carry across a big capacity change.
 CAPACITY_CHANGE_FLAG = 0.25
+# Methods that combine with the difference method, so need the peak-hour factor K.
+NEEDS_K = {"difference", "combined", "nchrp765", "weighted", "modified_average", "odot"}
 # Horizon may run this many years past the count (user decision).
 MAX_HORIZON_YEARS = 50
 
@@ -76,6 +78,26 @@ def _nchrp765_pick(C, Mb, Mf, K, ratio, difference):
     if R > NCHRP765_MAX_RAT:
         return difference, "difference", R
     return 0.5 * (mratio + difference), "average of ratio and difference", R
+
+
+def _weighted(ratio, difference, MR):
+    """Weighted growth (NCHRP 765 Table 6-2 'MRATIO'; ODOT APM §6.11 p. 6-75):
+    leans toward difference as model growth MR grows; plain ratio when MR ≤ 1."""
+    return ratio if MR <= 1 else ((MR - 1) * difference + ratio) / MR
+
+
+def _odot_pick(ratio, difference, MR):
+    """ODOT APM v2 Ch. 6 decision tree (pp. 6-75/76), on directional links:
+    model change > 25% → difference; else if growth and difference results are
+    within ±10% → growth (model change < 5%) or weighted growth (≥ 5%); else
+    modified average (mean of weighted growth and difference)."""
+    if abs(MR - 1) > 0.25:
+        return difference, "difference"
+    if abs(difference - ratio) <= 0.10 * max(abs(ratio), 1.0):
+        if abs(MR - 1) < 0.05:
+            return ratio, "ratio"
+        return _weighted(ratio, difference, MR), "weighted growth"
+    return 0.5 * (_weighted(ratio, difference, MR) + difference), "modified average"
 
 
 def _refine_one(count_base, model_base, model_future, *,
@@ -127,7 +149,7 @@ def _refine_one(count_base, model_base, model_future, *,
                 "method": "held-flat", "status": "held-flat", "flags": flags,
                 **_growth_meta(C, C, years, [])}
 
-    if method in ("difference", "combined", "nchrp765") and K is None:
+    if method in NEEDS_K and K is None:
         flags.append({"code": "REFINE-NO-K",
                       "message": f"{method} requested but no peak_hour_factor — fell back to ratio."})
         method = "ratio"
@@ -137,6 +159,12 @@ def _refine_one(count_base, model_base, model_future, *,
         selected, sel_method = combined, "combined"
     elif method == "nchrp765":
         selected, sel_method, _ = _nchrp765_pick(C, Mb, Mf, K, ratio, difference)
+    elif method == "weighted":
+        selected, sel_method = _weighted(ratio, difference, growth), "weighted growth"
+    elif method == "modified_average":
+        selected, sel_method = 0.5 * (_weighted(ratio, difference, growth) + difference), "modified average"
+    elif method == "odot":
+        selected, sel_method = _odot_pick(ratio, difference, growth)
     else:
         selected, sel_method = ratio, "ratio"
 
@@ -233,7 +261,9 @@ def refine_corridor(
         peak_hour_factor: optional K (period→peak-hour). Enables difference/
             combined; ratio ignores it (growth factor is K-invariant).
         method: 'ratio' (default/operative) | 'difference' | 'combined' |
-            'nchrp765' (picks per leg by count ÷ model; needs K).
+            'nchrp765' (picks per leg by count ÷ model) | 'weighted' |
+            'modified_average' | 'odot' (ODOT APM decision tree). All but
+            ratio need K.
         count_year / horizon_year: the analysis years. When given, model volumes
             are interpolated to them first (NCHRP 765 §9.2). Omitted → the model
             years are used as-is (legacy behaviour).

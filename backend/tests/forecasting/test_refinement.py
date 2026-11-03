@@ -280,3 +280,25 @@ def test_capacity_change_flag():
     mr = match_network_to_legs([_intx()], base)
     r = refine_corridor(mr, base, horizon, COUNTS, Period.AM)[0]
     assert any(f["code"] == "REFINE-CAPACITY-CHANGE" for f in r["approaches"]["NB"]["flags"])
+
+
+def test_weighted_growth_and_odot_tree_match_odot_examples():
+    # ODOT APM v2 Ex. 6-18..6-20 (p. 6-74/75): count 1,690, model 1,195 → 1,390 (K = 1).
+    from forecasting.refinement import _odot_pick, _weighted
+    ratio, diff, MR = 1690 * 1390 / 1195, 1690 + (1390 - 1195), 1390 / 1195
+    assert round(ratio) == 1966 and diff == 1885          # ODOT prints 1,965 (rounded MR)
+    w = _weighted(ratio, diff, MR)
+    assert round(w) == 1954                               # ODOT prints 1,953 (rounded MR; 1,185 typo for 1,885)
+    assert _odot_pick(ratio, diff, MR)[1] == "weighted growth"   # ODOT: "Weighted Growth Method would be used"
+    # base 500 → 1,390: model change > 25% → difference, 2,580 as ODOT says
+    v, m = _odot_pick(1690 * 1390 / 500, 1690 + 890, 1390 / 500)
+    assert m == "difference" and v == 2580
+
+
+def test_new_methods_selectable_and_need_k():
+    base, fut = _DEF, _scaled(_DEF, 1.15)
+    for m in ("weighted", "modified_average", "odot"):
+        nb = _refine(base, fut, peak_hour_factor=0.5, method=m)["approaches"]["NB"]["inbound"]
+        assert nb["refined"] > 650 and nb["method"] in ("weighted growth", "modified average")
+        nb = _refine(base, fut, method=m)["approaches"]["NB"]["inbound"]
+        assert nb["method"] == "ratio" and any(f["code"] == "REFINE-NO-K" for f in nb["flags"])
