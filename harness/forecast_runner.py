@@ -109,12 +109,12 @@ def grade(world, counts, am, am2_raw, am_raw, am_rot):
     checks.append(_check('F-roads-conserve', 'forecast-invariant', bad))
 
     # probes
-    checks.append(_check('probe-idempotency', 'unknown',
+    checks.append(_check('F-probe-idempotency', 'unknown',
                          [] if am_raw == am2_raw else ['same request twice gave different answers']))
     rot = fp.unrotate(_int_keys(am_rot['pass2']['balanced']))
     bad = [f'int {i} {m}: EW={out[i][m]} NS={rot[i].get(m)}' for i in out for m in STANDARD_MOVEMENTS
            if out[i].get(m) != rot[i].get(m)]
-    checks.append(_check('probe-orientation-sweep', 'unknown', bad))
+    checks.append(_check('F-probe-orientation', 'unknown', bad))   # F-: own signatures, not the balancer's
 
     # 2. the hidden true future
     rows = []
