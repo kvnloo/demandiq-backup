@@ -28,10 +28,16 @@ from forecasting.ingest import ADAPTERS, FILE_REGIONS, ingest_networks, SANDAG_D
 from forecasting.matcher import match_network_to_legs
 from forecasting.refinement import refine_corridor
 from forecasting.pass1 import forecast_corridor
-from forecasting.pass2 import balance_future
+from forecasting.pass2 import balance_future, round_forecast
+from forecasting.od import forecast_trips
+from forecasting.trend import fit_trend, uniform_growth
 from forecasting.vmt import corridor_vmt
 
 router = APIRouter()
+
+# Link step without a travel model; turn/corridor step choices.
+NO_MODEL_METHODS = {"trend", "rate"}
+TURN_METHODS = {"furness", "fratar", "fuzzy"}
 
 
 def _int_keys(d):
@@ -130,22 +136,33 @@ def ingest_match(payload: dict):
 @router.post("/run")
 def run_forecast(payload: dict):
     """refine → Pass 1 → Pass 2 for each period. Pure Python; no geo deps."""
-    layers_in = payload.get("layers") or {}
-    if "base" not in layers_in or "horizon" not in layers_in:
-        raise HTTPException(
-            status_code=400,
-            detail="layers must include both 'base' and 'horizon' "
-                   "(forecasting needs two model years).")
+    refine_method = payload.get("refine_method", "ratio")
+    turn_method = payload.get("turn_method", "furness")
+    if turn_method not in TURN_METHODS:
+        raise HTTPException(status_code=400, detail=f"turn_method must be one of {sorted(TURN_METHODS)}")
     try:
-        base_layer = NetworkLayer.model_validate(layers_in["base"])
-        horizon_layer = NetworkLayer.model_validate(layers_in["horizon"])
-    except ValidationError as e:
-        raise HTTPException(status_code=422, detail=f"invalid layer payload: {e}")
+        band = float(payload.get("fuzzy_band_pct", 5)) / 100
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="fuzzy_band_pct must be numeric")
+    uses_model = refine_method not in NO_MODEL_METHODS
+
+    layers_in = payload.get("layers") or {}
+    base_layer = horizon_layer = None
+    if uses_model:
+        if "base" not in layers_in or "horizon" not in layers_in:
+            raise HTTPException(
+                status_code=400,
+                detail="layers must include both 'base' and 'horizon' "
+                       "(forecasting needs two model years).")
+        try:
+            base_layer = NetworkLayer.model_validate(layers_in["base"])
+            horizon_layer = NetworkLayer.model_validate(layers_in["horizon"])
+        except ValidationError as e:
+            raise HTTPException(status_code=422, detail=f"invalid layer payload: {e}")
 
     matches = payload.get("matches") or []
     links = payload.get("links") or []
     method = payload.get("method", "larger")
-    refine_method = payload.get("refine_method", "ratio")
     peak_hour_factor = payload.get("peak_hour_factor")
     coords = _int_keys(payload.get("coords") or {})
     balanced = payload.get("balanced_tmcs") or {}
@@ -160,6 +177,29 @@ def run_forecast(payload: dict):
                 years[key] = int(v)
             except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail=f"{key} must be a year")
+
+    growth = None                      # no-model link step: (factor, label, annual rate, notes)
+    if not uses_model:
+        if len(years) < 2:
+            raise HTTPException(status_code=400, detail="count_year and horizon_year are required")
+        n = years["horizon_year"] - years["count_year"]
+        if not 0 <= n <= 50:
+            raise HTTPException(status_code=400, detail="horizon year must be 0–50 years after the count year")
+        try:
+            if refine_method == "trend":
+                t = fit_trend(payload.get("trend_points") or [], years["count_year"])
+                notes = [f"{t['kind']} trend from {t['n']} counts {t['years'][0]}–{t['years'][1]}: "
+                         f"{t['annual_rate']:+.2%}/yr, R² {t['r2']:.2f}"]
+                if t["r2"] < 0.75:
+                    notes.append(f"trend fit is weak (R² {t['r2']:.2f} < 0.75 — ODOT APM §6.5 would not use it)")
+                growth = (t["factor"](years["horizon_year"]), "historical trend", t["annual_rate"], notes)
+            else:
+                if payload.get("growth_rate_pct") in (None, ""):
+                    raise ValueError("enter a growth rate (% per year; negative for a decline)")
+                rate = float(payload.get("growth_rate_pct")) / 100
+                growth = (1 + rate * n, "growth rate entered", rate, [f"{rate:+.2%}/yr entered by the engineer"])
+        except (TypeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e) or "growth_rate_pct must be numeric")
 
     manual = payload.get("manual_targets")
     manual_targets = {int(k): v for k, v in manual.items()} if manual else None
@@ -190,21 +230,36 @@ def run_forecast(payload: dict):
         period = Period[p]
         tmcs = _int_keys(balanced.get(p) or {})
         try:
-            rr = refine_corridor(matches, base_layer, horizon_layer, tmcs, period,
-                                 peak_hour_factor=peak_hour_factor, method=refine_method,
-                                 **years)
-            futures, p1_meta = forecast_corridor(rr, tmcs, manual_targets=manual_targets)
-            p2 = balance_future(futures, links, coords=coords, method=method)
-            vmt = corridor_vmt(links, coords, matches, base_layer, horizon_layer,
-                               tmcs, p2["balanced_unrounded"], rr, period,
-                               expansion_factor=vmt_factor,
-                               scenario_factor=scenario_factor)
+            if uses_model:
+                rr = refine_corridor(matches, base_layer, horizon_layer, tmcs, period,
+                                     peak_hour_factor=peak_hour_factor, method=refine_method,
+                                     **years)
+            else:
+                rr = uniform_growth(tmcs, period, growth[0], label=growth[1],
+                                    annual_rate=growth[2], notes=growth[3])
+            trips = None
+            if turn_method == "furness":
+                futures, p1_meta = forecast_corridor(rr, tmcs, manual_targets=manual_targets)
+                p2 = balance_future(futures, links, coords=coords, method=method)
+            else:
+                futures, p1_meta, trips = forecast_trips(rr, tmcs, links, coords,
+                                                         method=turn_method, band=band)
+                # trips already agree across the corridor — only rounding remains
+                p2 = {"balanced_unrounded": futures, "method": turn_method,
+                      "converged": {n: m["converged"] for n, m in p1_meta.items()},
+                      "qc_flags": [],             # trip-table notes ride on pass1.meta flags
+                      "balanced": {n: {m: round_forecast(v) for m, v in mv.items()} for n, mv in futures.items()}}
+            vmt = (corridor_vmt(links, coords, matches, base_layer, horizon_layer,
+                                tmcs, p2["balanced_unrounded"], rr, period,
+                                expansion_factor=vmt_factor, scenario_factor=scenario_factor)
+                   if uses_model else None)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         out[p] = {
             "refinement": rr,
             "pass1": {"futures": _str_keys(futures), "meta": _str_keys(p1_meta)},
             "pass2": _serialize_pass2(p2),
+            "trips": trips,
             "vmt": vmt,
         }
     return out

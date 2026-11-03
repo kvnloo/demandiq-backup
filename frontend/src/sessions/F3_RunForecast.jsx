@@ -13,7 +13,7 @@ import { runForecast } from '../lib/forecastRun'
 
 import '../styles/forms.css'
 import '../styles/forecasting.css'
-import { METHODS } from '../lib/forecastMethods'
+import { METHODS, TURN_METHODS, NO_MODEL, parseTrend } from '../lib/forecastMethods'
 
 const DIRS = ['NB', 'SB', 'EB', 'WB']
 const RESOLUTIONS = [
@@ -50,6 +50,10 @@ export default function F3_RunForecast() {
     method: snap.balancing?.linkResolution ?? 'larger',
     refineMethod: 'ratio',
     peakHourFactor: '',
+    turnMethod: 'furness',
+    fuzzyBand: 5,
+    trendText: '',
+    growthRate: '',
     ...(fc.settings ?? {}),
   }))
   const [status, setStatus] = useState('idle') // idle | loading | error
@@ -82,7 +86,13 @@ export default function F3_RunForecast() {
   // Difference/Combined are only dimensionally valid with a peak-hour factor K.
   const kRaw = settings.peakHourFactor
   const kValid = kRaw !== '' && kRaw != null && Number(kRaw) > 0
-  const refineMethod = kValid ? settings.refineMethod : 'ratio'
+  const noModel = NO_MODEL.has(settings.refineMethod)
+  const refineMethod = noModel || kValid ? settings.refineMethod : 'ratio'
+  const trendPts = parseTrend(settings.trendText)
+  const yearsSet = !!fc.baseYear && !!fc.horizonYear
+  const growthReady = refineMethod === 'trend'
+    ? new Set(trendPts.map((p) => p.year)).size >= 3
+    : settings.growthRate !== '' && settings.growthRate != null && !Number.isNaN(Number(settings.growthRate))
 
   const unresolved = (matches ?? []).reduce(
     (n, m) => n + DIRS.filter((d) => legNeedsReview(m.legs?.[d])).length,
@@ -91,7 +101,9 @@ export default function F3_RunForecast() {
 
   const update = (key, value) => setSettings((s) => ({ ...s, [key]: value }))
 
-  const canRun = hasBase && hasHorizon && unresolved === 0 && (matches?.length ?? 0) > 0 && status !== 'loading'
+  const canRun = status !== 'loading' && (noModel
+    ? growthReady && yearsSet
+    : hasBase && hasHorizon && unresolved === 0 && (matches?.length ?? 0) > 0)
 
   const run = async () => {
     setStatus('loading')
@@ -114,13 +126,23 @@ export default function F3_RunForecast() {
       <div className="di-eyebrow">Forecasting · Step 3</div>
       <h1 className="di-h1">Run forecast</h1>
       <p className="di-subtitle">
-        Grow the balanced base-year counts to the horizon year (NCHRP 255
-        refinement → per-intersection IPF → corridor balancing).
+        Grow the balanced counts to the forecast year in two choices: how each road
+        grows, then how road forecasts become turning movements.{' '}
+        <a href="/methods-guide.html" target="_blank" rel="noreferrer" style={{ color: 'var(--signal-amber)' }}>
+          How the methods differ, with test results →
+        </a>
       </p>
 
-      {!matches ? (
+      {!matches && !noModel ? (
         <div className="di-fc-note">
-          Pull and match the model network first.{' '}
+          Pull and match the model network first — or{' '}
+          <button
+            type="button"
+            onClick={() => update('refineMethod', 'trend')}
+            style={{ background: 'none', border: 'none', color: 'var(--signal-amber)', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
+          >
+            forecast without a model
+          </button>.{' '}
           <button
             type="button"
             onClick={() => navigate('/forecast/match')}
@@ -131,8 +153,8 @@ export default function F3_RunForecast() {
         </div>
       ) : (
         <div className="di-form">
-          {/* ── Link resolution ─────────────────────────────────────── */}
-          <div className="di-field">
+          {/* ── Link resolution (only the per-intersection method balances links) ── */}
+          {settings.turnMethod === 'furness' && <div className="di-field">
             <label className="di-label">Link disagreement resolution</label>
             <div className="di-pill-group">
               {RESOLUTIONS.map((r) => (
@@ -147,11 +169,11 @@ export default function F3_RunForecast() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* ── Refinement method ───────────────────────────────────── */}
           <div className="di-field">
-            <label className="di-label">Refinement method</label>
+            <label className="di-label">1 · How each road grows</label>
             <select
               className="di-input"
               value={refineMethod}
@@ -159,21 +181,94 @@ export default function F3_RunForecast() {
               style={{ maxWidth: 360 }}
               aria-label="Refinement method"
             >
-              {METHODS.map((m) => (
-                <option key={m.id} value={m.id} disabled={m.id !== 'ratio' && !kValid}>
-                  {m.label}{m.id !== 'ratio' && !kValid ? ' — needs K' : ''}
-                </option>
-              ))}
+              {METHODS.map((m) => {
+                const off = !m.noModel && m.id !== 'ratio' && !kValid
+                return (
+                  <option key={m.id} value={m.id} disabled={off}>
+                    {m.label}{off ? ' — needs K' : ''}
+                  </option>
+                )
+              })}
             </select>
             <p className="di-help" style={{ lineHeight: 1.5 }}>
-              {METHODS.find((m) => m.id === refineMethod)?.help}{' '}
-              Model flows are period volumes (e.g. 6–10 am) and counts are one peak hour, so every
-              method except Ratio needs the peak-hour factor K below (peak hour ÷ model period).
+              {METHODS.find((m) => m.id === refineMethod)?.help}
+              {!noModel && (
+                <>{' '}Model flows are period volumes (e.g. 6–10 am) and counts are one peak hour,
+                so every model method except Ratio needs the peak-hour factor K below.</>
+              )}
             </p>
+            {refineMethod === 'trend' && (
+              <>
+                <label className="di-label" htmlFor="fc-trend">Past counts — one per line: year, volume</label>
+                <textarea
+                  id="fc-trend"
+                  className="di-input"
+                  rows={5}
+                  placeholder={'2015 18200\n2018 18900\n2021 19300\n2024 19800'}
+                  value={settings.trendText}
+                  onChange={(e) => update('trendText', e.target.value)}
+                  style={{ maxWidth: 360, fontFamily: 'var(--font-mono, monospace)' }}
+                />
+                <p className="di-help">
+                  Same location and kind of count each year (e.g. Caltrans AADT or a yearly PM count).
+                  {trendPts.length > 0 && ` ${trendPts.length} read.`} Needs 3+ years; 10 is better (VDOT).
+                </p>
+              </>
+            )}
+            {refineMethod === 'rate' && (
+              <>
+                <label className="di-label" htmlFor="fc-rate">Growth, % per year</label>
+                <input
+                  id="fc-rate"
+                  className="di-input"
+                  type="number"
+                  step="0.1"
+                  placeholder="e.g. 1.0, or -0.5 for a decline"
+                  value={settings.growthRate}
+                  onChange={(e) => update('growthRate', e.target.value)}
+                  style={{ maxWidth: 220 }}
+                />
+              </>
+            )}
+            {noModel && !yearsSet && (
+              <div className="di-fc-banner di-fc-banner--warn">Set the count year and forecast year in step 1.</div>
+            )}
+          </div>
+
+          <div className="di-field">
+            <label className="di-label">2 · How road forecasts become turning movements</label>
+            <select
+              className="di-input"
+              value={settings.turnMethod}
+              onChange={(e) => update('turnMethod', e.target.value)}
+              style={{ maxWidth: 420 }}
+              aria-label="Turn method"
+            >
+              {TURN_METHODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+            <p className="di-help" style={{ lineHeight: 1.5 }}>
+              {TURN_METHODS.find((m) => m.id === settings.turnMethod)?.help}
+            </p>
+            {settings.turnMethod === 'fuzzy' && (
+              <>
+                <label className="di-label" htmlFor="fc-band">Band, ± %</label>
+                <input
+                  id="fc-band"
+                  className="di-input"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="49"
+                  value={settings.fuzzyBand}
+                  onChange={(e) => update('fuzzyBand', e.target.value)}
+                  style={{ maxWidth: 120 }}
+                />
+              </>
+            )}
           </div>
 
           {/* ── Advanced: peak-hour factor ──────────────────────────── */}
-          <div className="di-field">
+          {!noModel && <div className="di-field">
             <label className="di-label" htmlFor="fc-k">Peak-hour factor K (optional)</label>
             <input
               id="fc-k"
@@ -186,9 +281,9 @@ export default function F3_RunForecast() {
               onChange={(e) => update('peakHourFactor', e.target.value)}
               style={{ maxWidth: 280 }}
             />
-          </div>
+          </div>}
 
-          {!hasHorizon && (
+          {!noModel && !hasHorizon && (
             <div className="di-fc-note">
               A <strong>horizon network</strong> isn&apos;t loaded yet — Method 1 grows the
               count by the model&apos;s base→horizon change, so it needs both years.
@@ -198,7 +293,7 @@ export default function F3_RunForecast() {
             </div>
           )}
 
-          {unresolved > 0 && (
+          {!noModel && unresolved > 0 && (
             <div className="di-fc-banner di-fc-banner--warn">
               {unresolved} leg{unresolved === 1 ? '' : 's'} still need a decision in{' '}
               <button
@@ -261,18 +356,24 @@ function PeriodDiag({ period, data }) {
   const converged = nums.filter((n) => conv[n]).length
   const qc = data.pass2?.qc_flags?.length ?? 0
 
-  const refFlags = []
+  // One line per distinct note, with where it applies (a corridor-wide note
+  // would otherwise repeat on every leg).
+  const byMsg = new Map()
+  const note = (msg, where) => byMsg.set(msg, [...(byMsg.get(msg) ?? []), where])
   for (const r of data.refinement ?? []) {
     for (const d of ['NB', 'SB', 'EB', 'WB']) {
       const leg = r.approaches?.[d]
       if (!leg) continue
       for (const dir of ['inbound', 'outbound']) {
-        for (const f of leg[dir]?.flags ?? []) {
-          refFlags.push(`Int ${r.intersection_num} ${d} ${dir}: ${f.message}`)
-        }
+        for (const f of leg[dir]?.flags ?? []) note(f.message, `Int ${r.intersection_num} ${d} ${dir === 'inbound' ? 'in' : 'out'}`)
       }
     }
   }
+  for (const n of nums) {
+    for (const f of data.pass1?.meta?.[n]?.flags ?? []) note(f.message, `Int ${n}`)
+  }
+  const refFlags = [...byMsg].map(([msg, where]) =>
+    where.length > 3 ? `${msg} (${where.length} places)` : `${where.join(', ')}: ${msg}`)
   const residuals = nums.map((n) => data.pass1?.meta?.[n]?.residual ?? 0)
   const maxResid = residuals.length ? Math.max(...residuals) : 0
 
@@ -284,14 +385,16 @@ function PeriodDiag({ period, data }) {
         <span className={converged === nums.length ? 'di-fc-gate--ok' : 'di-fc-gate--todo'}>
           {converged}/{nums.length} converged
         </span>
-        <span>max Pass-1 residual {maxResid.toFixed(1)} veh</span>
+        {data.trips
+          ? <span>{data.trips.reduce((n, t) => n + t.trips, 0)} corridor trip paths</span>
+          : <span>max Pass-1 residual {maxResid.toFixed(1)} veh</span>}
         <span className={qc === 0 ? 'di-fc-gate--ok' : 'di-fc-gate--todo'}>
           {qc === 0 ? 'no QC flags' : `${qc} QC flag${qc === 1 ? '' : 's'}`}
         </span>
       </div>
       {refFlags.length > 0 && (
         <details className="di-fc-diag__flags">
-          <summary>{refFlags.length} refinement flag{refFlags.length === 1 ? '' : 's'}</summary>
+          <summary>{refFlags.length} note{refFlags.length === 1 ? '' : 's'}</summary>
           <ul>{refFlags.map((f, i) => <li key={i}>{f}</li>)}</ul>
         </details>
       )}
