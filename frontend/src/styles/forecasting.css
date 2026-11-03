@@ -528,3 +528,6 @@
   border-color: var(--signal-amber);
   background: var(--signal-amber-glow);
 }
+
+/* every link method's answer side by side (Provenance) */
+.di-fc-prov__cmp { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-secondary, #8E9AA6); margin: 2px 0 4px; }

@@ -204,3 +204,19 @@ other engine code should need to change for a SANDAG-shaped model.
 - Pass 1 evens traffic in = out before Furness (NCHRP 255 p. 133).
 - Reported forecasts round per NCHRP 765 Table 4-8 (10 / 50 / 100 / 500 / 1,000);
   `balanced_unrounded` keeps the 5-vph values, which VMT uses.
+
+## Method choices (two questions)
+
+1. **How each road grows** (`refine_method`): ratio, difference, combined
+   (NCHRP 255 average), weighted, modified_average, nchrp765, odot — all from
+   the model — or `trend` (fit of past counts) / `rate` (engineer's %/yr), which
+   need no model (`layers` may be null).
+2. **How road forecasts become turns** (`turn_method`): `furness` (Pass 1 +
+   Pass 2, the NCHRP standard), `fratar` (corridor trip table grown to end and
+   side-street totals), `fuzzy` (Fratar table nudged so every leg is within
+   ±`fuzzy_band_pct` of its forecast). Trip methods need one straight corridor
+   (`forecasting/od.py`).
+
+Benchmark with a known answer: `python -m forecasting.benchmark out.json 20
+../frontend/public/methods-guide.html` rebuilds the results tables in the
+in-app guide (`/methods-guide.html`).

@@ -6,7 +6,7 @@ import { Loader2, Info } from 'lucide-react'
 import { subscribe, getSnapshot, isExistingAnalysisDone, setForecasting } from '../store/projectStore'
 import { buildPayload } from '../lib/diagramPayload'
 import { runForecast } from '../lib/forecastRun'
-import { METHODS } from '../lib/forecastMethods'
+import { METHODS, TURN_METHODS } from '../lib/forecastMethods'
 
 import '../styles/forms.css'
 import '../styles/forecasting.css'
@@ -126,7 +126,9 @@ export default function F4_FutureResults() {
 
   const kRaw = fc.settings?.peakHourFactor
   const kValid = kRaw !== '' && kRaw != null && Number(kRaw) > 0
-  const rm = kValid ? (fc.settings?.refineMethod || 'ratio') : 'ratio'
+  const chosenRm = fc.settings?.refineMethod || 'ratio'
+  const rm = kValid || ['trend', 'rate'].includes(chosenRm) ? chosenRm : 'ratio'
+  const turnLabel = (TURN_METHODS.find((m) => m.id === (fc.settings?.turnMethod || 'furness'))?.short ?? '')
   const methodLabel = METHODS.find((m) => m.id === rm)?.label ?? cap(rm)
 
   const scenario = results?.[effPeriod]?.vmt?.scenario ?? null
@@ -178,8 +180,9 @@ export default function F4_FutureResults() {
       <button type="button" className="di-fc-cite" onClick={() => setShowProv((v) => !v)}>
         <Info size={13} />
         <span>
-          NCHRP 765 ({methodLabel}) · {fc.region === 'MTC' ? 'MTC Bay Area' : 'SANDAG'} · {fc.baseYear || 'base'} → {fc.horizonYear || 'horizon'}
-          {' · '}K={kValid ? Number(kRaw) : '—'}
+          {methodLabel} · {turnLabel}
+          {['trend', 'rate'].includes(rm) ? ' · no model' : ` · ${fc.region === 'MTC' ? 'MTC Bay Area' : 'SANDAG'} · K=${kValid ? Number(kRaw) : '—'}`}
+          {' · '}{fc.baseYear || 'base'} → {fc.horizonYear || 'horizon'}
         </span>
         <span className="di-fc-cite__toggle">{showProv ? 'Hide provenance' : 'Show provenance'}</span>
       </button>
@@ -433,7 +436,19 @@ function Provenance({ refinement }) {
       return `held flat at ${num(sub.count_base)} (model base 0)`
     }
     const g = sub.growth_factor != null ? sub.growth_factor.toFixed(2) : '—'
-    return `count ${num(sub.count_base)} × (Mf ${num(sub.model_future)} / Mb ${num(sub.model_base)}) = ${num(sub.refined)}  [${sub.method}, ×${g}]`
+    if (sub.model_base == null) return `count ${num(sub.count_base)} × ${g} = ${num(sub.refined)}  [${sub.method}]`
+    return `count ${num(sub.count_base)}, model ${num(sub.model_base)} → ${num(sub.model_future)} ⇒ ${num(sub.refined)}  [${sub.method}, ×${g}]`
+  }
+  // Every link method's answer for this approach, so the engineer sees what the choice changes.
+  const compare = (sub) => {
+    if (!sub || sub.difference == null) return null
+    const opts = [['Ratio', sub.ratio], ['Difference', sub.difference], ['Average', sub.combined],
+      ['Weighted', sub.weighted], ['Modified avg', sub.modified_average]]
+    return (
+      <div className="di-fc-prov__cmp">
+        {opts.map(([k, v]) => v != null && <span key={k}>{k} {num(v)}</span>)}
+      </div>
+    )
   }
   return (
     <div className="di-fc-prov">
@@ -451,6 +466,7 @@ function Provenance({ refinement }) {
           <div key={d} className="di-fc-prov__leg">
             <strong>{d}</strong>
             <div>in: {fmt(leg.inbound)}</div>
+            {compare(leg.inbound)}
             <div>out: {fmt(leg.outbound)}</div>
             {flags.map((f, i) => (
               <div key={i} className="di-fc-prov__flag">⚠ {f.message}</div>

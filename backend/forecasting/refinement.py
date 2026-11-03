@@ -202,6 +202,10 @@ def _refine_one(count_base, model_base, model_future, *,
         **out, "growth_factor": round(growth, 4),
         "count_model_ratio": round(R, 3) if R is not None else None, "ratio": ratio,
         "difference": difference, "combined": combined,
+        # every method's answer, so the UI can show them side by side
+        "weighted": _weighted(ratio, difference, growth) if difference is not None else None,
+        "modified_average": (0.5 * (_weighted(ratio, difference, growth) + difference)
+                             if difference is not None else None),
         "refined": refined, "method": sel_method, "status": "refined", "flags": flags,
         **_growth_meta(C, refined, years, flags),
     }

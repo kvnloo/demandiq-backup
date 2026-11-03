@@ -2,6 +2,7 @@
 // (scenario re-run), so the request shape is defined in exactly one place — the
 // scenario factor rides the SAME payload the baseline run sends, plus one field.
 import { getIntersections, getLinks, resolveLinkMode } from '../store/projectStore'
+import { NO_MODEL, parseTrend } from './forecastMethods'
 
 const DIRS = ['NB', 'SB', 'EB', 'WB']
 
@@ -54,10 +55,12 @@ export function buildRunPayload({ snap, settings, scenarioFactor = null }) {
 
   const kRaw = settings?.peakHourFactor
   const kValid = kRaw !== '' && kRaw != null && Number(kRaw) > 0
-  const refineMethod = kValid ? (settings?.refineMethod || 'ratio') : 'ratio'
+  const chosen = settings?.refineMethod || 'ratio'
+  const noModel = NO_MODEL.has(chosen)
+  const refineMethod = noModel || kValid ? chosen : 'ratio'
 
   const payload = {
-    layers: fc.layers,
+    layers: noModel ? null : fc.layers,
     matches,
     balanced_tmcs,
     links,
@@ -68,6 +71,10 @@ export function buildRunPayload({ snap, settings, scenarioFactor = null }) {
     peak_hour_factor: kValid ? Number(kRaw) : null,
     manual_targets,
     // Analysis years: the backend interpolates the model runs to these.
+    turn_method: settings?.turnMethod || 'furness',
+    fuzzy_band_pct: settings?.fuzzyBand === '' || settings?.fuzzyBand == null ? 5 : Number(settings.fuzzyBand),
+    trend_points: refineMethod === 'trend' ? parseTrend(settings?.trendText) : undefined,
+    growth_rate_pct: refineMethod === 'rate' ? settings?.growthRate : undefined,
     count_year: fc.baseYear ? Number(fc.baseYear) : null,
     horizon_year: fc.horizonYear ? Number(fc.horizonYear) : null,
   }
