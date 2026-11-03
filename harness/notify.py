@@ -238,6 +238,7 @@ class SessionNotifier:
             lines += [f'  {i}. {cat} × {n}' for i, (cat, n) in enumerate(ranked, 1)]
         else:
             lines.append('Fix first: nothing — no failures this session.')
+        lines += self._forecast_lines()
         return '\n'.join(lines)
 
     # ── summary persistence (for next session's trend) ───────────────────
