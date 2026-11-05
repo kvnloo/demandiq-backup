@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import NeedsStep from '../components/NeedsStep'
+import ModelFileUpload from '../components/ModelFileUpload'
 import { Plus, Trash2 } from 'lucide-react'
 
-import { getForecasting, setForecasting, isExistingAnalysisDone } from '../store/projectStore'
+import { getForecasting, setForecasting, isExistingAnalysisDone, getIntersections, getSnapshot } from '../store/projectStore'
 import { isMatchStale, isRunStale } from '../lib/forecastRun'
 import '../styles/forms.css'
 import '../styles/forecasting.css'
@@ -24,6 +25,7 @@ const ROLES = [
 const REGIONS = [
   { id: 'SANDAG', label: 'San Diego (SANDAG)' },
   { id: 'MTC', label: 'Bay Area (MTC)' },
+  { id: 'UPLOAD', label: 'My model file' },
 ]
 const MTC_NETWORKS = [
   { role: 'base', scenarioYear: 2015 },
@@ -99,13 +101,12 @@ export default function F1_HorizonNetwork() {
 
   const hasHorizon = form.networks.some((n) => n.role === 'horizon')
   const isMtc = form.region === 'MTC'
+  const isUpload = form.region === 'UPLOAD'
   const pickRegion = (id) =>
     setForm((f) => ({
       ...f,
       region: id,
-      networks: id === 'MTC'
-        ? MTC_NETWORKS
-        : SANDAG_NETWORKS,
+      networks: id === 'MTC' ? MTC_NETWORKS : SANDAG_NETWORKS,
     }))
   const countYear = Number(form.baseYear)
   const horizonYear = Number(form.horizonYear)
@@ -186,7 +187,18 @@ export default function F1_HorizonNetwork() {
           )}
         </div>
 
-        {!isMtc && <div className="di-field">
+        {isUpload && (
+          <ModelFileUpload
+            networks={form.networks}
+            intersections={getIntersections().map((it) => ({ num: it.num, lat: it.lat, lng: it.lng }))}
+            periodHours={form.periodHours}
+            needsPm={(getSnapshot().project?.analysisPeriods ?? ['AM', 'PM']).includes('PM')}
+            onNetwork={updateNetwork}
+            onPeriodHours={(v) => update('periodHours', v)}
+          />
+        )}
+
+        {!isMtc && !isUpload && <div className="di-field">
           <label className="di-label">SANDAG model networks</label>
           <p className="di-help" style={{ marginTop: 0 }}>
             Pick the model run for the base and the horizon. The base run should be

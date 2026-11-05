@@ -832,7 +832,8 @@ FC_LINK_METHODS = {
 FC_TURN_METHODS = {'furness': 'NCHRP standard (Furness, then corridor balance)',
                    'fratar': 'Trip table — Fratar', 'fuzzy': 'Trip table — fuzzy'}
 FC_MODEL = {'SANDAG': ('SANDAG (San Diego)', 'hwyLoad_{y}.shp', 'AM 6–9 am (3 h), PM 3:30–7 pm (3.5 h)'),
-            'MTC': ('MTC Travel Model One (Bay Area)', 'mtc/{y}/network_links.shp', 'AM 6–10 am (4 h), PM 3–7 pm (4 h)')}
+            'MTC': ('MTC Travel Model One (Bay Area)', 'mtc/{y}/network_links.shp', 'AM 6–10 am (4 h), PM 3–7 pm (4 h)'),
+            'UPLOAD': ("Engineer's own model file (uploaded)", '{y} model year file', None)}
 
 
 def _js_round(v):
@@ -878,6 +879,9 @@ def build_forecast_workbook(project_state):
     rm, tm = st.get('refineMethod') or 'ratio', st.get('turnMethod') or 'furness'
     no_model = rm in ('trend', 'rate')
     model_name, file_pat, periods_txt = FC_MODEL.get(region, (region, '{y}', MISSING))
+    if periods_txt is None:   # uploaded model: period lengths the engineer entered in F1
+        ph = fc.get('periodHours') or {}
+        periods_txt = ', '.join(f"{p} {ph[p]} h" for p in ('AM', 'PM') if ph.get(p)) or MISSING
     years = run.get('modelYears') or {}
     names = {it.get('num'): it for it in project_state.get('intersections') or []}
 

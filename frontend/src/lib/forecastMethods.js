@@ -29,6 +29,23 @@ export const MODEL_PERIODS = {
 }
 export const K_WARN = { min: 0.15, max: 0.6 }
 
+// What the UI calls each model source.
+export const MODEL_NAME = { SANDAG: 'SANDAG', MTC: 'Bay Area (MTC)', UPLOAD: 'uploaded model' }
+
+// Model periods for K help. An uploaded model's period lengths come from F1.
+export function modelPeriods(fc) {
+  const region = fc?.region || 'SANDAG'
+  if (region !== 'UPLOAD') return MODEL_PERIODS[region] ?? MODEL_PERIODS.SANDAG
+  const h = fc?.periodHours ?? {}
+  const txt = (p) => (Number(h[p]) > 0 ? `${Number(h[p])} h` : 'length not given')
+  const am = Number(h.AM)
+  return {
+    AM: txt('AM'),
+    PM: txt('PM'),
+    typicalK: am > 0 ? `${(1 / am).toFixed(2)}–${Math.min(1, 1.35 / am).toFixed(2)}` : '1 ÷ the period length in hours',
+  }
+}
+
 // One past count per line: "2015 18200", "2015, 18,200", "2015;18200".
 // Returns { points: [{year, volume}], dropped: [line text] } — every non-blank
 // line that isn't a 4-digit year + positive volume is reported, never ignored.

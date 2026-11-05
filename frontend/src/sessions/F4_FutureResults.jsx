@@ -209,7 +209,7 @@ export default function F4_FutureResults() {
         <Info size={13} />
         <span>
           {methodLabel} · {turnLabel}
-          {['trend', 'rate'].includes(rm) ? ' · no model' : ` · ${ran.region === 'MTC' ? 'MTC Bay Area' : 'SANDAG'} · K (peak hr ÷ model period) ${kValid ? Number(kRaw) : 'not used'}`}
+          {['trend', 'rate'].includes(rm) ? ' · no model' : ` · ${ran.region === 'MTC' ? 'MTC Bay Area' : ran.region === 'UPLOAD' ? 'own model file' : 'SANDAG'} · K (peak hr ÷ model period) ${kValid ? Number(kRaw) : 'not used'}`}
           {' · '}{ran.baseYear || 'base'} → {ran.horizonYear || 'horizon'}
         </span>
         <span className="di-fc-cite__toggle">{showProv ? 'Hide provenance' : 'Show provenance'}</span>

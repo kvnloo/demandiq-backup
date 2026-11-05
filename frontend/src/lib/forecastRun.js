@@ -25,10 +25,13 @@ export function runSettings(settings) {
   }
 }
 
-// What a network pull depended on (F1 region + model years).
+// What a network pull depended on (F1 region + model years; for an uploaded
+// model also the file and its column mapping).
 export const pullKey = (fc) => JSON.stringify([
   fc?.region || 'SANDAG',
-  (fc?.networks ?? []).map((n) => [n.role, Number(n.scenarioYear)]),
+  (fc?.networks ?? []).map((n) => (fc?.region === 'UPLOAD'
+    ? [n.role, Number(n.scenarioYear), n.uploadId ?? null, n.mapping ?? null]
+    : [n.role, Number(n.scenarioYear)])),
 ])
 
 // What a forecast run depended on. Results are stale when this no longer matches
