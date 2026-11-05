@@ -32,7 +32,7 @@ export function doneSteps(snap = {}) {
   return new Set([
     snap.project?.name?.trim() && 1,
     some && 2,
-    some && ints.every(configured) && 3,
+    some && snap.analysis?.approachesReviewed && ints.every(configured) && 3, // defaults alone aren't a review
     some && ints.every((it) => hasKeys(it.volumes?.AM) || hasKeys(it.volumes?.PM)) && 4,
     analysed && 5, // balancing settings count as used once a run balanced with them
     analysed && 6,
