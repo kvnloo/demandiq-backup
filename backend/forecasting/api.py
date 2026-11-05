@@ -18,14 +18,18 @@ Validation mirrors app.py's style: dict payloads + HTTPException. Round-tripped
 layers are validated through the NetworkLayer Pydantic model.
 """
 
+import io
 import math
-from pathlib import Path
+import re
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
+from excel_export import build_forecast_workbook
 from forecasting.contract import NetworkLayer, Period
-from forecasting.ingest import ADAPTERS, FILE_REGIONS, ingest_networks, SANDAG_DATA_DIR
+from forecasting.adapters.mtc import available_years as mtc_years
+from forecasting.ingest import ADAPTERS, ingest_networks, sandag_years
 from forecasting.matcher import match_network_to_legs
 from forecasting.refinement import refine_corridor
 from forecasting.pass1 import forecast_corridor
@@ -42,8 +46,43 @@ LINK_METHODS = {"ratio", "difference", "combined", "weighted", "modified_average
 TURN_METHODS = {"furness", "fratar", "fuzzy"}
 
 
-def _int_keys(d):
-    return {int(k): v for k, v in (d or {}).items()}
+def _bad(msg):
+    raise HTTPException(status_code=400, detail=msg)
+
+
+def _intx_num(k, what):
+    try:
+        if float(k) == int(float(k)):
+            return int(float(k))
+    except (TypeError, ValueError):
+        pass
+    _bad(f"{what}: {k!r} is not an intersection number")
+
+
+def _volume(v, what):
+    """A finite, non-negative number (vehicles) — the trust boundary for counts/targets."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        _bad(f"{what} must be a number of vehicles")
+    if not math.isfinite(f) or f < 0:
+        _bad(f"{what} must be zero or more vehicles")
+    return f
+
+
+def _by_intx(d, what):
+    """{intersection number: object} from a JSON object keyed by number."""
+    if d in (None, ""):
+        return {}
+    if not isinstance(d, dict):
+        _bad(f"{what} must be an object keyed by intersection number")
+    out = {}
+    for k, v in d.items():
+        n = _intx_num(k, what)
+        if not isinstance(v, dict):
+            _bad(f"{what} for intersection {n} must be an object")
+        out[n] = v
+    return out
 
 
 def _str_keys(d):
@@ -85,26 +124,33 @@ def ingest_match(payload: dict):
     if region not in ADAPTERS:
         raise HTTPException(status_code=400, detail=f"unknown region {region!r} (available: {sorted(ADAPTERS)})")
 
-    # Resolve each network file to a BASENAME under the server's SANDAG data dir.
-    # Clients send a filename (e.g. "hwyLoad.shp"); directory parts are stripped,
-    # so a path can never escape data/sandag and resolution is independent of the
-    # server's working directory.
-    data_root = SANDAG_DATA_DIR.resolve()
-    norm_networks = []
+    for it in intersections:
+        if not isinstance(it, dict):
+            _bad("each intersection must be an object")
+        if it.get("num") is None:
+            _bad("every intersection needs its number (num)")
+        _intx_num(it["num"], "intersection")
+
+    # The model file is picked server-side from (region, model year) — clients
+    # never send a path (any `path` is dropped), so nothing can escape data/.
+    # Cheap checks run here, before the slow shapefile read.
+    norm_networks, roles = [], set()
     for n in networks:
         if not isinstance(n, dict):
             raise HTTPException(status_code=400, detail="each network must be an object")
-        spec = dict(n)
-        raw = n.get("path")
-        if region not in FILE_REGIONS:
-            spec.pop("path", None)            # live-service regions never take a client path
-        elif raw is not None:
-            resolved = (data_root / Path(str(raw)).name).resolve()
-            if not str(resolved).startswith(str(data_root)):
-                raise HTTPException(status_code=400,
-                                    detail=f"network path must resolve under {data_root}")
-            spec["path"] = str(resolved)
-        norm_networks.append(spec)
+        role = n.get("role")
+        if role not in ("base", "horizon"):
+            _bad("each network needs a role: 'base' or 'horizon'")
+        if role in roles:
+            _bad(f"two networks are tagged {role!r} — use one base and one horizon")
+        roles.add(role)
+        try:
+            year = int(n.get("scenario_year"))
+        except (TypeError, ValueError):
+            _bad(f"the {role} network needs a model year")
+        norm_networks.append({"role": role, "scenario_year": year})
+    if "base" not in roles:
+        _bad("a network with role 'base' is required to match")
 
     try:
         radius = float(payload.get("filter_radius_ft", 300))
@@ -116,23 +162,39 @@ def ingest_match(payload: dict):
     except ModuleNotFoundError:
         raise HTTPException(
             status_code=503,
-            detail=("ingest requires the forecasting geo dependencies "
-                    "(geopandas/shapely/pyproj) — run the app under the combined "
-                    "venv (requirements.txt + requirements-forecasting.txt)."),
+            detail=("Forecasting isn't set up on this server yet (its geo dependencies "
+                    "aren't installed) — ask the DemandIQ admin."),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    base = layers.get("base")
-    if base is None:
-        raise HTTPException(status_code=400,
-                            detail="a network with role 'base' is required to match")
-
-    matches = match_network_to_legs(intersections, base)
+    matches = match_network_to_legs(intersections, layers["base"])
     return {
         "layers": {role: lyr.model_dump(mode="json") for role, lyr in layers.items()},
         "matches": matches,
     }
+
+
+@router.post("/export-excel")
+def export_forecast_excel(payload: dict):
+    """Forecast workbook (summary + future TMCs + VMT) from the project snapshot —
+    same shape as app.py's /export-excel; numbers read verbatim from the run F4 shows."""
+    if not ((payload.get("forecasting") or {}).get("results")):
+        _bad("there are no forecast results to export — run the forecast first (Forecasting step 3).")
+    data = build_forecast_workbook(payload)
+    name = ((payload.get("project") or {}).get("name") or "").strip()
+    safe = re.sub(r"[^a-zA-Z0-9_-]+", "_", name).strip("_") or "project"
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{safe}_forecast.xlsx"'},
+    )
+
+
+@router.get("/model-years")
+def model_years():
+    """Model years available on this server, per file-backed region."""
+    return {"SANDAG": sandag_years(), "MTC": mtc_years()}
 
 
 @router.post("/run")
@@ -167,6 +229,13 @@ def run_forecast(payload: dict):
 
     matches = payload.get("matches") or []
     links = payload.get("links") or []
+    if not isinstance(matches, list) or not all(isinstance(m, dict) for m in matches):
+        _bad("matches must be a list of intersection matches")
+    if not isinstance(links, list) or not all(isinstance(L, dict) for L in links):
+        _bad("links must be a list of {fromNum, toNum, direction}")
+    for L in links:
+        L["fromNum"] = _intx_num(L.get("fromNum"), "link fromNum")
+        L["toNum"] = _intx_num(L.get("toNum"), "link toNum")
     method = payload.get("method", "larger")
     peak_hour_factor = payload.get("peak_hour_factor")
     if peak_hour_factor not in (None, ""):
@@ -179,9 +248,19 @@ def run_forecast(payload: dict):
             raise HTTPException(status_code=400, detail="peak_hour_factor must be between 0 and 1 (peak hour ÷ model period)")
     else:
         peak_hour_factor = None
-    coords = _int_keys(payload.get("coords") or {})
+    coords = {}
+    for n, c in _by_intx(payload.get("coords"), "coords").items():
+        try:
+            if c.get("lat") is not None and c.get("lng") is not None:
+                coords[n] = {"lat": float(c["lat"]), "lng": float(c["lng"])}
+        except (TypeError, ValueError):
+            _bad(f"coords for intersection {n} must be numbers (lat, lng)")
     balanced = payload.get("balanced_tmcs") or {}
+    if not isinstance(balanced, dict):
+        _bad("balanced_tmcs must be an object keyed by period (AM/PM)")
     periods = payload.get("periods") or ["AM", "PM"]
+    if not isinstance(periods, list):
+        _bad("periods must be a list, e.g. ['AM', 'PM']")
     # Analysis years (count → horizon). Both given → model volumes are interpolated
     # to them; either missing → the model years are used as-is.
     years = {}
@@ -217,15 +296,31 @@ def run_forecast(payload: dict):
             else:
                 if payload.get("growth_rate_pct") in (None, ""):
                     raise ValueError("enter a growth rate (% per year; negative for a decline)")
-                rate = float(payload.get("growth_rate_pct")) / 100
+                try:
+                    rate = float(payload.get("growth_rate_pct")) / 100
+                except (TypeError, ValueError):
+                    rate = math.nan
                 if not math.isfinite(rate):
-                    raise ValueError("growth rate must be a number (% per year)")
+                    raise ValueError("growth rate must be a number — % per year, e.g. 1.5 or -0.5")
                 growth = (1 + rate * n, "growth rate entered", rate, [f"{rate:+.2%}/yr entered by the engineer"])
         except (TypeError, ValueError) as e:
             raise HTTPException(status_code=400, detail=str(e) or "growth_rate_pct must be numeric")
+        if growth[0] <= 0:
+            # Straight-line decline that reaches zero: say so rather than forecast 0 vph.
+            how = "a straight-line trend of" if refine_method == "trend" else ""
+            raise HTTPException(status_code=400, detail=(
+                f"{how} {growth[2]:+.1%}/yr for {n} years removes all traffic by "
+                f"{years['horizon_year']} — use a smaller rate, a nearer horizon, or a trend.").strip())
 
-    manual = payload.get("manual_targets")
-    manual_targets = {int(k): v for k, v in manual.items()} if manual else None
+    manual_targets = {}
+    for n, legs in _by_intx(payload.get("manual_targets"), "manual_targets").items():
+        manual_targets[n] = {}
+        for d, t in legs.items():
+            if d not in ("NB", "SB", "EB", "WB") or not isinstance(t, dict):
+                _bad(f"manual_targets for intersection {n}: use {{NB|SB|EB|WB: {{inbound, outbound}}}}")
+            manual_targets[n][d] = {k: _volume(t.get(k), f"manual target Int {n} {d} {k}")
+                                    for k in ("inbound", "outbound")}
+    manual_targets = manual_targets or None
 
     # VMT peak→daily expansion factor — SEPARATE from the refinement K. Optional;
     # only used when the model carries no daily flows (else daily is data-derived).
@@ -236,8 +331,9 @@ def run_forecast(payload: dict):
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="vmt_expansion_factor must be numeric")
 
-    # Scenario demand-reduction factor — the engineer's mitigation assumption,
-    # applied to the forecast volumes (the tool never generates one). Range is
+    # Scenario demand-reduction factor — the engineer's mitigation assumption.
+    # It scales the VMT figures only (turning movements stay as forecast); the
+    # tool never generates one. Range is
     # validated inside corridor_vmt (0 < f < 1 → ValueError → 400 below).
     scenario_factor = payload.get("scenario_reduction_factor")
     if scenario_factor is not None:
@@ -251,7 +347,15 @@ def run_forecast(payload: dict):
         if p not in ("AM", "PM"):
             raise HTTPException(status_code=400, detail=f"period must be 'AM' or 'PM', got {p!r}")
         period = Period[p]
-        tmcs = _int_keys(balanced.get(p) or {})
+        tmcs = {n: {m: _volume(v, f"{p} count Int {n} {m}") for m, v in mv.items()}
+                for n, mv in _by_intx(balanced.get(p), f"balanced_tmcs.{p}").items()}
+        if not any(v > 0 for mv in tmcs.values() for v in mv.values()):
+            _bad(f"no counted volumes for the {p} period — balance the existing counts first.")
+        for L in links:
+            for end in ("fromNum", "toNum"):
+                if L[end] not in tmcs:
+                    _bad(f"link {L['fromNum']}→{L['toNum']} points at intersection {L[end]}, "
+                         f"which has no {p} counts.")
         try:
             if uses_model:
                 rr = refine_corridor(matches, base_layer, horizon_layer, tmcs, period,
@@ -270,7 +374,7 @@ def run_forecast(payload: dict):
                                                          manual_targets=manual_targets)
                 # trips already agree across the corridor — only rounding remains
                 p2 = {"balanced_unrounded": futures, "method": turn_method,
-                      "converged": {n: m["converged"] for n, m in p1_meta.items()},
+                      "converged": {n: m.get("converged", True) for n, m in p1_meta.items()},
                       "qc_flags": [],             # trip-table notes ride on pass1.meta flags
                       "balanced": {n: {m: round_forecast(v) for m, v in mv.items()} for n, mv in futures.items()}}
             vmt = (corridor_vmt(links, coords, matches, base_layer, horizon_layer,

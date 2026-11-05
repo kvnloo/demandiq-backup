@@ -5,8 +5,9 @@ import { Loader2, Info } from 'lucide-react'
 
 import { subscribe, getSnapshot, isExistingAnalysisDone, setForecasting } from '../store/projectStore'
 import { buildPayload } from '../lib/diagramPayload'
-import { runForecast } from '../lib/forecastRun'
+import { runForecast, friendlyError, isRunStale } from '../lib/forecastRun'
 import { METHODS, TURN_METHODS } from '../lib/forecastMethods'
+import { collectNotes, noteText, WARN_CODES, declineSummary } from '../lib/forecastNotes'
 
 import '../styles/forms.css'
 import '../styles/forecasting.css'
@@ -65,6 +66,10 @@ export default function F4_FutureResults() {
 
   const it = intersections.find((x) => x.num === effActive) ?? null
   const futureBal = results?.[effPeriod]?.pass2?.balanced?.[String(effActive)] ?? {}
+  const futureRaw = results?.[effPeriod]?.pass2?.balanced_unrounded?.[String(effActive)] ?? futureBal
+  // Labels come from what the run used (fc.run), never from later F1/F3 edits.
+  const ran = fc.run ?? { baseYear: fc.baseYear, horizonYear: fc.horizonYear, region: fc.region, settings: fc.settings ?? {} }
+  const stale = isRunStale(fc)
   const existingBal = it?.balanced?.[effPeriod] ?? {}
 
   // Render existing + future diagrams for the active intersection/period. The
@@ -80,8 +85,8 @@ export default function F4_FutureResults() {
         .then((d) => setDiagrams((prev) => new Map(prev).set(key, { status: 'done', png: d.png_base64 })))
         .catch((e) => setDiagrams((prev) => new Map(prev).set(key, { status: 'error', error: e.message })))
     }
-    const baseLabel = `${fc.baseYear || 'Base'} existing`
-    const horizonLabel = `${fc.horizonYear || 'Horizon'} forecast`
+    const baseLabel = `${ran.baseYear || 'Base'} existing`
+    const horizonLabel = `${ran.horizonYear || 'Horizon'} forecast`
     ensure('existing', buildPayload({ ...it, diagramNote: baseLabel }, effPeriod, 'balanced', overrides))
     ensure('future', buildPayload(
       { ...it, balanced: { ...it.balanced, [effPeriod]: futureBal }, diagramNote: horizonLabel },
@@ -124,11 +129,11 @@ export default function F4_FutureResults() {
     )
   }
 
-  const kRaw = fc.settings?.peakHourFactor
+  const kRaw = ran.settings?.peakHourFactor
   const kValid = kRaw !== '' && kRaw != null && Number(kRaw) > 0
-  const chosenRm = fc.settings?.refineMethod || 'ratio'
+  const chosenRm = ran.settings?.refineMethod || 'ratio'
   const rm = kValid || ['trend', 'rate'].includes(chosenRm) ? chosenRm : 'ratio'
-  const turnLabel = (TURN_METHODS.find((m) => m.id === (fc.settings?.turnMethod || 'furness'))?.short ?? '')
+  const turnLabel = (TURN_METHODS.find((m) => m.id === (ran.settings?.turnMethod || 'furness'))?.short ?? '')
   const methodLabel = METHODS.find((m) => m.id === rm)?.label ?? cap(rm)
 
   const scenario = results?.[effPeriod]?.vmt?.scenario ?? null
@@ -139,14 +144,14 @@ export default function F4_FutureResults() {
     setScenStatus('loading')
     setScenError(null)
     try {
-      const data = await runForecast({ snap, settings: fc.settings ?? {}, scenarioFactor })
+      const data = await runForecast({ snap, settings: ran.settings ?? {}, scenarioFactor })
       setForecasting({
         results: data,
         settings: { ...(fc.settings ?? {}), scenarioReductionPct: scenarioFactor == null ? '' : scenPct },
       })
       setScenStatus('idle')
     } catch (e) {
-      setScenError(e.message)
+      setScenError(friendlyError(e))
       setScenStatus('error')
     }
   }
@@ -163,9 +168,18 @@ export default function F4_FutureResults() {
   const existImg = diagrams.get(`${effActive}-${effPeriod}-existing`)
   const futImg = diagrams.get(`${effActive}-${effPeriod}-future`)
   const refinement = (results[effPeriod].refinement ?? []).find((r) => r.intersection_num === effActive)
+  const notes = collectNotes(results[effPeriod])
+  const warnings = notes.filter((n) => WARN_CODES.has(n.code) && n.code !== 'REFINE-DECLINE').map(noteText)
+  const declines = declineSummary(notes)
+  if (declines) warnings.push(declines)
 
+  // Δ compares like with like: the unrounded forecast minus the existing count
+  // (Future itself is rounded per NCHRP 765 Table 4-8). Same rule as the workbook.
   const rows = MOVEMENTS
-    .map((mv) => ({ mv, ex: num(existingBal[mv]), fu: num(futureBal[mv]) }))
+    .map((mv) => ({
+      mv, ex: num(existingBal[mv]), fu: num(futureBal[mv]),
+      d: Math.round(Number(futureRaw[mv] ?? futureBal[mv] ?? 0) - Number(existingBal[mv] ?? 0)),
+    }))
     .filter((r) => r.ex > 0 || r.fu > 0)
 
   return (
@@ -176,13 +190,27 @@ export default function F4_FutureResults() {
         Forecast turning movements, balanced across the corridor, beside existing conditions.
       </p>
 
+      {stale && (
+        <div className="di-fc-banner di-fc-banner--warn" role="alert" style={{ marginBottom: 10 }}>
+          These results are from an earlier run ({ran.baseYear || '?'} → {ran.horizonYear || '?'},
+          {' '}{methodLabel} · {turnLabel}). Inputs have changed since — run the forecast again in{' '}
+          <button
+            type="button"
+            onClick={() => navigate('/forecast/run')}
+            style={{ background: 'none', border: 'none', color: 'var(--signal-amber)', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
+          >
+            step 3
+          </button>.
+        </div>
+      )}
+
       {/* Methodology citation chip — persistent, click to expand provenance. */}
       <button type="button" className="di-fc-cite" onClick={() => setShowProv((v) => !v)}>
         <Info size={13} />
         <span>
           {methodLabel} · {turnLabel}
-          {['trend', 'rate'].includes(rm) ? ' · no model' : ` · ${fc.region === 'MTC' ? 'MTC Bay Area' : 'SANDAG'} · K=${kValid ? Number(kRaw) : '—'}`}
-          {' · '}{fc.baseYear || 'base'} → {fc.horizonYear || 'horizon'}
+          {['trend', 'rate'].includes(rm) ? ' · no model' : ` · ${ran.region === 'MTC' ? 'MTC Bay Area' : 'SANDAG'} · K (peak hr ÷ model period) ${kValid ? Number(kRaw) : 'not used'}`}
+          {' · '}{ran.baseYear || 'base'} → {ran.horizonYear || 'horizon'}
         </span>
         <span className="di-fc-cite__toggle">{showProv ? 'Hide provenance' : 'Show provenance'}</span>
       </button>
@@ -190,6 +218,10 @@ export default function F4_FutureResults() {
       {showProv && refinement && (
         <Provenance refinement={refinement} />
       )}
+
+      {warnings.map((n, i) => (
+        <div key={i} className="di-fc-banner di-fc-banner--warn" style={{ marginBottom: 8 }}>⚠ {n}</div>
+      ))}
 
       {/* Corridor VMT — green existing / amber future, unit + basis on its face. */}
       <VmtPanel vmt={results[effPeriod]?.vmt} />
@@ -199,6 +231,7 @@ export default function F4_FutureResults() {
         pct={scenPct}
         onPct={setScenPct}
         status={scenStatus}
+        disabled={stale}
         error={scenError}
         active={!!scenario}
         onApply={applyScenario}
@@ -243,29 +276,32 @@ export default function F4_FutureResults() {
                 <th>Move</th>
                 <th>Existing</th>
                 <th>Future</th>
-                <th>Δ</th>
+                <th title="Unrounded forecast − existing">Δ*</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
-                const d = r.fu - r.ex
-                return (
-                  <tr key={r.mv}>
-                    <td className="di-fc-tmc__mv">{r.mv}</td>
-                    <td>{r.ex}</td>
-                    <td className="di-fc-tmc__fut">{r.fu}</td>
-                    <td className="di-fc-tmc__d">{d > 0 ? `+${d}` : d}</td>
-                  </tr>
-                )
-              })}
+              {rows.map((r) => (
+                <tr key={r.mv}>
+                  <td className="di-fc-tmc__mv">{r.mv}</td>
+                  <td>{r.ex}</td>
+                  <td className="di-fc-tmc__fut">{r.fu}</td>
+                  <td className={`di-fc-tmc__d${r.d < 0 ? ' di-fc-tmc__d--down' : ''}`}>
+                    {r.d > 0 ? `+${r.d}` : r.d}{r.d < 0 ? ' ▼' : ''}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
+          <p className="di-help" style={{ marginTop: 6 }}>
+            vph. Future is rounded per NCHRP 765 Table 4-8. *Δ = unrounded forecast − existing,
+            so rounding never shows as growth; ▼ marks a decline.
+          </p>
         </div>
 
         {/* Comparison diagrams */}
         <div className="di-fc-diagrams">
-          <DiagramFig label={`${fc.baseYear || 'Base'} existing`} entry={existImg} />
-          <DiagramFig label={`${fc.horizonYear || 'Horizon'} forecast`} entry={futImg} />
+          <DiagramFig label={`${ran.baseYear || 'Base'} existing`} entry={existImg} />
+          <DiagramFig label={`${ran.horizonYear || 'Horizon'} forecast`} entry={futImg} />
         </div>
       </div>
 
@@ -285,7 +321,7 @@ export default function F4_FutureResults() {
 
 function VmtPanel({ vmt }) {
   const c = vmt?.corridor
-  if (!c) return null
+  if (!c || !c.link_count) return null   // single intersection / no links: nothing to measure
   const fmt = (n) => (n == null ? '—' : Math.round(n).toLocaleString())
   const sign = (n) => (n >= 0 ? '+' : '')
   const pct = c.existing_vmt > 0 ? Math.round((100 * c.delta) / c.existing_vmt) : null
@@ -314,21 +350,21 @@ function VmtPanel({ vmt }) {
         </div>
       )}
       <div className="di-fc-vmt__chip">
-        {c.corridor_length_mi} mi · {c.link_count} link{c.link_count === 1 ? '' : 's'} ·
+        {Number(c.corridor_length_mi).toFixed(2)} mi · {c.link_count} link{c.link_count === 1 ? '' : 's'} ·
         {' '}forecast volumes × model link length
         {c.gap_flag && <span className="di-fc-vmt__warn"> · ⚠ contains held segments</span>}
         {c.daily_estimated && (
           <span className="di-fc-vmt__warn"> · * daily estimated, expansion factor {c.expansion_factor}</span>
         )}
         {c.daily_needs_k && (
-          <span className="di-fc-vmt__warn"> · daily VMT needs the peak-hour factor K (step 3)</span>
+          <span className="di-fc-vmt__warn"> · daily VMT needs K, peak hour ÷ model period (step 3)</span>
         )}
       </div>
     </div>
   )
 }
 
-function ScenarioControl({ pct, onPct, status, error, active, onApply, onClear }) {
+function ScenarioControl({ pct, onPct, status, disabled, error, active, onApply, onClear }) {
   return (
     <div className="di-fc-scenctl">
       <label className="di-label" htmlFor="fc-scen">Demand-reduction scenario (optional)</label>
@@ -352,21 +388,21 @@ function ScenarioControl({ pct, onPct, status, error, active, onApply, onClear }
         <button
           type="button"
           className="di-fc-mini di-fc-mini--on"
-          disabled={status === 'loading'}
+          disabled={disabled || status === 'loading'}
           onClick={onApply}
         >
           {status === 'loading' ? 'Recomputing…' : active ? 'Update scenario' : 'Apply scenario'}
         </button>
         {active && (
-          <button type="button" className="di-fc-mini" disabled={status === 'loading'} onClick={onClear}>
+          <button type="button" className="di-fc-mini" disabled={disabled || status === 'loading'} onClick={onClear}>
             Clear
           </button>
         )}
       </div>
       <p className="di-help" style={{ lineHeight: 1.5, marginTop: 6 }}>
-        Your assumption — e.g. a CAPCOA measure or your own study. DemandIQ applies the
-        factor to the forecast volumes and recomputes VMT; it never supplies or suggests
-        a reduction.
+        Your assumption — e.g. a CAPCOA measure or your own study. It changes the VMT
+        figures only; the turning movements and diagrams stay as forecast. DemandIQ never
+        supplies or suggests a reduction.
       </p>
       {status === 'error' && error && (
         <div className="di-fc-banner di-fc-banner--error" role="alert" style={{ marginTop: 6 }}>
@@ -464,7 +500,7 @@ function Provenance({ refinement }) {
         if (leg.status === 'pending') {
           return <div key={d} className="di-fc-prov__leg"><strong>{d}</strong> — pending ({leg.reason})</div>
         }
-        const flags = [...(leg.inbound?.flags ?? []), ...(leg.outbound?.flags ?? [])]
+        const flags = [...(leg.flags ?? []), ...(leg.inbound?.flags ?? []), ...(leg.outbound?.flags ?? [])]
         return (
           <div key={d} className="di-fc-prov__leg">
             <strong>{d}</strong>

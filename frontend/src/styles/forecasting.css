@@ -390,6 +390,7 @@
 .di-fc-tmc__mv { text-align: left !important; color: var(--text-primary) !important; font-weight: 500; }
 .di-fc-tmc__fut { color: var(--signal-amber) !important; font-weight: 600; }
 .di-fc-tmc__d { color: var(--text-tertiary) !important; }
+.di-fc-tmc__d--down { color: var(--signal-red) !important; font-weight: 600; }
 
 /* Comparison diagrams */
 .di-fc-diagrams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

@@ -4,7 +4,7 @@ DemandIQ Forecasting — Module 7: Pass 2 (corridor balancer).
 The future-conditions counterpart to S6. Pass 1 produced each intersection's
 future turning movements independently; Pass 2 enforces LINK CONSERVATION across
 the corridor — the upstream intersection's outflow equals the downstream's
-approach on every link — and rounds to multiples of 5.
+approach on every link — then rounds ONCE per NCHRP 765 Table 4-8.
 
 PURE REUSE. It feeds Pass 1's futures straight into the existing, battle-tested
 S6 engine `balancer.balance_nchrp` — the SAME algorithm S6 runs on observed
@@ -51,14 +51,16 @@ def balance_future(futures, links, *, coords=None, method="larger", tol=0.5, max
         method: 'larger' (default) | 'average' — the S5 link-resolution setting.
 
     Returns:
-        balance_nchrp's result dict: balanced future TMCs (rounded per NCHRP 765 Table 4-8;
-        the 5-vph values stay in balanced_unrounded),
+        balance_nchrp's result dict: balanced future TMCs (rounded once per NCHRP
+        765 Table 4-8; the balanced, unrounded values stay in balanced_unrounded),
         resolved_links, link_conservation, iterations, converged, final_residual,
         qc_flags, movements_review, method.
     """
+    # round_to_5=False: S6's ceil-to-5 + re-balance is for counts. A forecast gets
+    # Table 4-8 once, on the balanced unrounded values — same as the trip-table path.
     out = balance_nchrp(futures, _normalize_links(links), method=method,
-                        coords=coords, tol=tol, max_iter=max_iter)
-    # Report forecasts at NCHRP 765 precision; keep the 5-vph values for the math.
+                        coords=coords, round_to_5=False, tol=tol, max_iter=max_iter)
+    # Report forecasts at NCHRP 765 precision; keep the unrounded values for the math.
     out["balanced_unrounded"] = out["balanced"]
     out["balanced"] = {n: {m: round_forecast(v) for m, v in mv.items()}
                        for n, mv in out["balanced"].items()}

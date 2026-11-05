@@ -89,8 +89,11 @@ def test_duplicate_role_raises(synthetic_sandag_shp, project_points_near):
         ])
 
 
-def test_unresolvable_path_raises(project_points_near):
-    with pytest.raises(ValueError, match="no path"):
+def test_unknown_sandag_year_lists_available(project_points_near, tmp_path, monkeypatch):
+    import forecasting.ingest as ing
+    monkeypatch.setattr(ing, "SANDAG_DATA_DIR", tmp_path)
+    (tmp_path / "hwyLoad_2035.shp").write_bytes(b"")
+    with pytest.raises(ValueError, match=r"available model years: \[2035\]"):
         ingest_networks(project_points_near, [{"role": "base", "scenario_year": 2025}])
 
 
@@ -100,11 +103,11 @@ def test_missing_scenario_year_raises(synthetic_sandag_shp, project_points_near)
 
 
 # ── Integration: single real network as base (only one file available) ───────
-REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad.shp"
+REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad_2025.shp"
 
 
 @pytest.mark.skipif(not REAL_SHP.exists(),
-                    reason="real SANDAG hwyLoad.shp not present (local-only)")
+                    reason="real SANDAG hwyLoad_2025.shp not present (local-only)")
 def test_real_single_network_ingest():
     pts = [{"num": 1, "lat": 32.624067, "lng": -116.959736}]   # DISCOVERY FALLS node
     out = ingest_networks(pts, [{"role": "base", "scenario_year": 2025, "path": REAL_SHP}])

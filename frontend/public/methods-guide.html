@@ -18,7 +18,7 @@ svg{width:100%;height:auto;display:block;margin:8px 0}
 <p class="mu">DemandIQ asks two questions. <b>1 · How does each road grow?</b> <b>2 · How do road forecasts become turning movements?</b> Any answer to 1 works with any answer to 2.</p>
 
 <h2>1 · How each road grows</h2>
-<p>Worked example (ODOT's own numbers): today's peak-hour count on Main St northbound is <b>1,690</b>. The model, brought to your years, goes <b>1,195 → 1,390</b> (+16 %). Peak-hour factor K = 1 for simplicity.</p>
+<p>Worked example (ODOT's own numbers): today's peak-hour count on Main St northbound is <b>1,690</b>. The model, brought to your years, goes <b>1,195 → 1,390</b> (+16 %). K (peak hour ÷ model period) = 1 for simplicity — the model here is already in peak-hour units; with SANDAG/MTC period volumes K is about 0.25–0.45.</p>
 <table>
 <tr><th>Method</th><th>Formula</th><th>Answer</th><th>Use when</th></tr>
 <tr><th>Ratio (growth)</th><td>1,690 × 1,390 ÷ 1,195</td><td><b>1,966</b></td><td style="text-align:left">Default. The model's error cancels out. NCHRP 765: "better over a longer horizon".</td></tr>

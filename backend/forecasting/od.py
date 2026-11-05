@@ -239,7 +239,9 @@ def forecast_trips(refinement_results, base_tmcs, links, coords, *, method="frat
         trips = _paths(order, axis, counts)
         if not trips:
             for n in order:
-                futures[n] = {}; meta[n] = {"flags": [{"code": "OD-NO-TRIPS", "message": "no counted movements."}]}
+                futures[n] = {}; meta[n] = {"period": rr_by[n]["period"], "converged": True, "iterations": 0,
+                                            "residual": 0.0,
+                                            "flags": [{"code": "OD-NO-TRIPS", "message": "no counted movements."}]}
             continue
 
         # 1. base trip table from the counts

@@ -37,7 +37,20 @@ def _line(xs, ys):
 def fit_trend(points, base_year):
     """points: [{year, volume}] (≥ 3 distinct years, volumes > 0).
     Returns {kind, annual_rate, r2, n, years, factor(year)->growth from base_year}."""
-    pts = sorted({int(p["year"]): float(p["volume"]) for p in points}.items())
+    read = {}
+    for p in points:
+        try:
+            y, v = float(p["year"]), float(p["volume"])
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("each past count needs a year and a volume (numbers).")
+        if y != int(y):
+            raise ValueError(f"{p['year']} is not a whole year.")
+        read[int(y)] = v
+    late = sorted(y for y in read if y > base_year)
+    if late:
+        raise ValueError(f"past counts must be from the count year {base_year} or earlier "
+                         f"(got {', '.join(map(str, late))}).")
+    pts = sorted(read.items())
     if len(pts) < 3:
         raise ValueError("historical trend needs counts from at least 3 different years.")
     if any(v <= 0 for _, v in pts):
@@ -64,11 +77,12 @@ def uniform_growth(balanced_tmcs, period, factor, *, label, annual_rate, notes=(
     flags = [{"code": "GROWTH-NOTE", "message": m} for m in notes]
     if annual_rate < 0:
         flags.append({"code": "REFINE-DECLINE",
-                      "message": f"traffic falls {annual_rate:.1%}/yr — kept as is; note the reason in the report."})
+                      "message": f"traffic falls {annual_rate:.1%}/yr — a decline, kept as is (no floor); note the reason in the report."})
     elif annual_rate >= 0.03:
         flags.append({"code": "REFINE-HIGH-GROWTH",
                       "message": f"growth {annual_rate:.1%}/yr is high (3%/yr+ gets a second look in DOT practice)."})
-    factor = max(factor, 0.0)
+    if factor <= 0:   # never clamp a decline to zero silently (callers give the plain-words 400)
+        raise ValueError(f"growth factor {factor:.3f} removes all traffic — use a smaller decline.")
     out = []
     for num, counts in balanced_tmcs.items():
         approaches = {}
