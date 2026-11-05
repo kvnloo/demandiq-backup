@@ -12,7 +12,11 @@ import {
   setBalancing,
   clearAllOverrides,
   resolveLinkMode,
+  isResultsStale,
 } from '../store/projectStore'
+import RunStatusBanner from '../components/RunStatusBanner'
+import { friendlyError } from '../lib/apiError'
+import { intLabel } from '../lib/labels'
 import { dropsSummary, formatIntRange, MAJOR_DROP_THRESHOLD_VEH } from '../lib/dropsSummary'
 import { computeHeroState } from '../lib/heroState'
 import { buildResolvedRows } from '../lib/resolvedTargets'
@@ -36,6 +40,8 @@ function hasAnyVolumes(intersections) {
 }
 
 // Build the /balance-nchrp payload (Stage 4 — NCHRP 255/765 rewrite).
+// Each link's mode is the effective one (S5 per-link edits win over the S2
+// creation-time mode) — the same resolveLinkMode S6/S7 display.
 function buildPayload(intersections, balancing, links) {
   const numByPin = new Map(intersections.map((it) => [it.id, it.num]))
 
@@ -65,7 +71,7 @@ function buildPayload(intersections, balancing, links) {
       fromNum,
       toNum,
       direction: L.direction,
-      mode: L.mode ?? 'Full',
+      mode: resolveLinkMode(L.fromId, L.toId),
     })
   }
 
@@ -106,10 +112,15 @@ function fmtWindow(w) {
 }
 
 // Compare the run's snapshot config (lastRun.config) to current balancing.
-// Returns array of changed field labels (empty when in sync).
-function configDiff(runCfg, balancing) {
+// Returns array of changed field labels (empty when in sync). countsChanged
+// (isResultsStale) and the link modes the next run would send cover the
+// inputs that live outside state.balancing.
+function configDiff(runCfg, balancing, { countsChanged = false, linkModes = null } = {}) {
   if (!runCfg) return []
   const diffs = []
+  if (countsChanged) diffs.push('Counts')
+  if (runCfg.linkModes && linkModes && runCfg.linkModes.join() !== linkModes.join()) diffs.push('Link modes')
+  if ((runCfg.enabled ?? true) !== (balancing.enabled ?? true)) diffs.push('Balancing on/off')
   const cur = {
     linkResolution: balancing.linkResolution ?? 'larger',
     peakMode: balancing.peakMode ?? 'Corridor',
@@ -192,6 +203,31 @@ export default function S6_RunAnalysis() {
 
       const links = getLinks()
       const payload = buildPayload(intersections, effectiveBalancing, links)
+      const config = {
+        linkResolution: effectiveBalancing.linkResolution ?? 'larger',
+        peakMode: effectiveBalancing.peakMode ?? 'Corridor',
+        amWindow: effectiveBalancing.amWindow ?? null,
+        pmWindow: effectiveBalancing.pmWindow ?? null,
+        convergenceThreshold: effectiveBalancing.convergenceThreshold ?? 0.5,
+        maxIterations: effectiveBalancing.maxIterations ?? 500,
+        corridorDir: effectiveBalancing.corridorDir ?? null,
+        enabled: effectiveBalancing.enabled ?? true,
+        linkModes: payload.links.map((l) => l.mode),   // exactly what was sent
+      }
+      // S5 "Balance volumes" off: no balancing at all — the raw counts pass
+      // through as the results, and every results screen labels them so.
+      if (config.enabled === false) {
+        applyBalancedRun(payload.unbalanced_volumes)
+        const empty = { AM: [], PM: [] }
+        setLastRun({
+          timestamp: new Date().toISOString(), method: 'none', notBalanced: true,
+          resolvedLinks: empty, iterations: { AM: {}, PM: {} }, intConverged: { AM: {}, PM: {} },
+          finalResidual: { AM: {}, PM: {} }, linkConservation: empty, movementsReview: empty,
+          qcFlags: [], config,
+        })
+        setStatus('done')
+        return
+      }
       const res = await fetch('/api/balance-nchrp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -215,19 +251,11 @@ export default function S6_RunAnalysis() {
         linkConservation: data.link_conservation ?? { AM: [], PM: [] },
         movementsReview: data.movements_review ?? { AM: [], PM: [] },
         qcFlags: data.qc_flags ?? [],
-        config: {
-          linkResolution: effectiveBalancing.linkResolution ?? 'larger',
-          peakMode: effectiveBalancing.peakMode ?? 'Corridor',
-          amWindow: effectiveBalancing.amWindow ?? null,
-          pmWindow: effectiveBalancing.pmWindow ?? null,
-          convergenceThreshold: effectiveBalancing.convergenceThreshold ?? 0.5,
-          maxIterations: effectiveBalancing.maxIterations ?? 500,
-          corridorDir: effectiveBalancing.corridorDir ?? null,
-        },
+        config,
       })
       setStatus('done')
     } catch (err) {
-      setError(`${err.message}. If the backend is down, restart: cd backend && python3.12 app.py`)
+      setError(friendlyError(err))
       setStatus('error')
     }
   }
@@ -252,7 +280,11 @@ export default function S6_RunAnalysis() {
   const runMaxIter = lastRun?.config?.maxIterations ?? balancing.maxIterations ?? 500
   const runMethod = lastRun?.method ?? balancing.linkResolution ?? 'larger'
   const runTol = lastRun?.config?.convergenceThreshold ?? balancing.convergenceThreshold ?? 0.5
-  const cfgDiffs = configDiff(lastRun?.config, balancing)
+  const cfgDiffs = configDiff(lastRun?.config, balancing, {
+    countsChanged: isResultsStale(snap),
+    linkModes: buildPayload(intersections, balancing, snap.links || []).links.map((l) => l.mode),
+  })
+  const notBalanced = Boolean(lastRun?.notBalanced)
   const drops = dropsSummary(movementsReview)
 
   // Top-line: are all links conserving and all intersections converged?
@@ -286,9 +318,9 @@ export default function S6_RunAnalysis() {
   // "0/0 links conserve ✓" in green on a corridor that never balanced.
   const linksConfigured = (snap.links || []).length
   const linkResolutionSkipped =
-    hasResults && linksConfigured > 0 &&
+    hasResults && !notBalanced && linksConfigured > 0 &&
     amResolved.length === 0 && pmResolved.length === 0
-  const heroState = computeHeroState({
+  const heroState = notBalanced ? 'warn' : computeHeroState({
     hasResults, linkResolutionSkipped, allConverged, allConserved, hasDrops,
   })
 
@@ -303,11 +335,13 @@ export default function S6_RunAnalysis() {
             <div className="di-s6-cfg di-s6-cfg--prerun">
               <h3 className="di-s6-cfg__title">Ready to run</h3>
               <p className="di-s6-cfg__hint">
-                Calls /api/balance-nchrp — pure NCHRP 255/765 turning-movement
-                refinement (per-intersection Fratar factoring against
-                link-resolved targets). Under <em>Larger</em>, Furness scales
-                mostly upward; under <em>Average</em>, individual movements can
-                drop below raw counts (expected NCHRP behavior).
+                {balancing.enabled === false
+                  ? 'Balancing is switched off in Balancing Settings, so running passes your raw counts through unchanged.'
+                  : <>Balancing makes neighbouring counts agree. Each link between two intersections
+                    gets one target volume (the <em>larger</em> of the two counts, or their <em>average</em> —
+                    set in Balancing Settings), then each intersection&apos;s turning movements are scaled to
+                    meet its targets. Some movements can end up a little below their raw count; the results
+                    list every one.</>}
               </p>
               <button
                 type="button"
@@ -320,6 +354,8 @@ export default function S6_RunAnalysis() {
               </button>
             </div>
           )}
+
+          <RunStatusBanner snap={snap} running={isRunning} onRun={() => runWith(null)} />
 
           {/* Error banner */}
           {status === 'error' && error && (
@@ -344,6 +380,7 @@ export default function S6_RunAnalysis() {
               ageLabel={formatAge(lastRun?.timestamp)}
               linkResolutionSkipped={linkResolutionSkipped}
               linksConfigured={linksConfigured}
+              notBalanced={notBalanced}
             />
           )}
 
@@ -351,7 +388,6 @@ export default function S6_RunAnalysis() {
           {hasResults && (
             <RunMetadata
               lastRun={lastRun}
-              balancing={balancing}
               cfgDiffs={cfgDiffs}
             />
           )}
@@ -377,11 +413,11 @@ export default function S6_RunAnalysis() {
 
           {/* e. LINK CONSERVATION */}
           {hasResults && (amLinkConservation.length > 0 || pmLinkConservation.length > 0) && (
-            <LinkConservationTable rows={lcRows} />
+            <LinkConservationTable rows={lcRows} intersections={intersections} />
           )}
 
           {/* f. PER-INTERSECTION CONVERGENCE */}
-          {hasResults && (
+          {hasResults && !notBalanced && (
             <IntersectionConvergenceList
               intersections={intersections}
               amIters={amIters}
@@ -403,22 +439,23 @@ export default function S6_RunAnalysis() {
               type="button"
               className="di-btn-secondary"
               disabled={isRunning}
-              onClick={() => runWith(runMethod === 'larger' ? 'average' : 'larger')}
-              title={`Re-run with ${runMethod === 'larger' ? 'Average' : 'Larger'} link resolution`}
+              onClick={() => runWith(null)}
+              title={cfgDiffs.length > 0
+                ? `Run again with the current settings and counts (${cfgDiffs.join(', ')} changed)`
+                : 'Run again with the same settings'}
             >
               {isRunning && <Loader2 size={14} className="di-spin" />}
-              Re-run with {runMethod === 'larger' ? 'Average' : 'Larger'}
+              Run again
             </button>
-            {cfgDiffs.length > 0 && (
+            {!notBalanced && (
               <button
                 type="button"
                 className="di-btn-secondary"
                 disabled={isRunning}
-                onClick={() => runWith(null)}
-                title={`Re-run with current settings (${cfgDiffs.join(', ')} changed)`}
+                onClick={() => runWith(runMethod === 'larger' ? 'average' : 'larger')}
+                title={`Run again using the ${runMethod === 'larger' ? 'average' : 'larger'} of the two counts on each link`}
               >
-                {isRunning && <Loader2 size={14} className="di-spin" />}
-                Re-run with current settings
+                Re-run with {runMethod === 'larger' ? 'Average' : 'Larger'}
               </button>
             )}
             <div className="di-s6__footer-spacer" />
@@ -475,8 +512,19 @@ function HeroStrip({
   state, isRunning, allConverged, allConserved,
   amOk, pmOk, total, lcViolations, lcTotal, lcLargestDelta,
   method, tolerance, ageLabel,
-  linkResolutionSkipped, linksConfigured,
+  linkResolutionSkipped, linksConfigured, notBalanced,
 }) {
+  if (notBalanced) {
+    return (
+      <div className={`di-s6-hero2 di-s6-hero2--${state}`}>
+        <div className="di-s6-hero2__head">Not balanced — balancing is switched off</div>
+        <div className="di-s6-hero2__sub">
+          These results are your raw counts, passed through unchanged{ageLabel ? ` · Run ${ageLabel}` : ''}.
+          Turn on “Balance volumes” in Balancing Settings to balance them.
+        </div>
+      </div>
+    )
+  }
   // F4: lead with link conservation (the real corridor-correctness signal).
   // Demote per-intersection IPF convergence to a quiet tertiary line below
   // the sub — it's a matrix-stability statement about each intersection
@@ -494,13 +542,13 @@ function HeroStrip({
   })()
   const methodLabel = method === 'average' ? 'Average' : 'Larger'
   const subLine = linkResolutionSkipped
-    ? 'Verify each link\'s corridor direction in S2 (axis form: EB/WB or NB/SB). The corridor balance did not engage; per-intersection IPF ran independently.'
-    : `Method: ${methodLabel} · Tolerance: ${Number(tolerance).toFixed(2)} veh${ageLabel ? ` · Run ${ageLabel}` : ''}`
+    ? 'Check each link\'s direction on the map (EB/WB or NB/SB). The links were not used, so each intersection was balanced on its own.'
+    : `Link targets: ${methodLabel === 'Average' ? 'average' : 'larger'} of the two counts · Tolerance: ${Number(tolerance).toFixed(2)} veh${ageLabel ? ` · Run ${ageLabel}` : ''}`
   const ipfMissed = (total - amOk) + (total - pmOk)
   const ipfLine = !linkResolutionSkipped && (
     allConverged
-      ? `AM ${amOk}/${total} · PM ${pmOk}/${total} intersections IPF-stable`
-      : `AM ${amOk}/${total} · PM ${pmOk}/${total} IPF-stable (${ipfMissed} hit max iter)`
+      ? `AM ${amOk}/${total} · PM ${pmOk}/${total} intersections settled (volumes stopped changing)`
+      : `AM ${amOk}/${total} · PM ${pmOk}/${total} intersections settled (${ipfMissed} stopped at the pass limit — check them)`
   )
   return (
     <div className={`di-s6-hero2 di-s6-hero2--${state}`}>
@@ -512,13 +560,14 @@ function HeroStrip({
 }
 
 // ── RunMetadata ──────────────────────────────────────────────────────────
-function RunMetadata({ lastRun, balancing, cfgDiffs }) {
+// Describes the run as it was SENT (lastRun.config), never current settings.
+function RunMetadata({ lastRun, cfgDiffs }) {
   const [open, setOpen] = useState(true)
   const cfg = lastRun?.config ?? {}
-  const linkModes = balancing.linkBalanceModes ?? {}
-  const linkCount = Object.keys(linkModes).length
-  const modeCounts = Object.values(linkModes).reduce(
-    (acc, m) => ({ ...acc, [m.mode]: (acc[m.mode] ?? 0) + 1 }),
+  const sentModes = cfg.linkModes ?? []
+  const linkCount = sentModes.length
+  const modeCounts = sentModes.reduce(
+    (acc, m) => ({ ...acc, [m]: (acc[m] ?? 0) + 1 }),
     { Full: 0, 'Land Use': 0, None: 0 },
   )
   return (
@@ -527,7 +576,7 @@ function RunMetadata({ lastRun, balancing, cfgDiffs }) {
         <span className="di-s6-meta__title">Run metadata</span>
         {cfgDiffs.length > 0 && (
           <span className="di-s6-meta__changed">
-            <AlertTriangle size={11} /> Config changed since this run: {cfgDiffs.join(', ')}
+            <AlertTriangle size={11} /> Changed since this run: {cfgDiffs.join(', ')}
           </span>
         )}
         <span className="di-s6-meta__chev">
@@ -536,7 +585,8 @@ function RunMetadata({ lastRun, balancing, cfgDiffs }) {
       </div>
       {open && (
         <div className="di-s6-meta__grid">
-          <CfgRow k="Method" v={cfg.linkResolution === 'average' ? 'Average' : 'Larger'} />
+          <CfgRow k="Balancing" v={cfg.enabled === false ? 'Off (raw counts passed through)' : 'On'} />
+          <CfgRow k="Link targets" v={cfg.linkResolution === 'average' ? 'Average of the two counts' : 'Larger of the two counts'} />
           <CfgRow k="Peak mode" v={cfg.peakMode === 'Independent' ? 'Independent' : 'Corridor (shared)'} />
           <CfgRow k="Direction" v={cfg.corridorDir ?? '—'} />
           <CfgRow k="AM window" v={fmtWindow(cfg.amWindow)} />
@@ -598,6 +648,7 @@ function DropsBanner({ drops, onReview }) {
 function ResolvedTargets({ am, pm, intersections }) {
   const [open, setOpen] = useState(false)
   const idByNum = new Map(intersections.map((it) => [String(it.num), it.id]))
+  const byNum = new Map(intersections.map((it) => [String(it.num), it]))
 
   // Effective mode lookup is now centralised in the store. Both directions
   // (a→b and b→a) + linkBalanceModes vs store.links fallback live there.
@@ -620,7 +671,7 @@ function ResolvedTargets({ am, pm, intersections }) {
           {rows.length} link{rows.length === 1 ? '' : 's'}
           {suspiciousCount > 0 ? ` · ${suspiciousCount} suspicious` : ''}
           {smoothedCount > 0 ? ` · ${smoothedCount} reconciled raw counts` : ''}
-          {' · values AM (PM)'}
+          {' · values shown as AM (PM)'}
         </span>
         <span className="di-s6-meta__chev">
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -646,7 +697,7 @@ function ResolvedTargets({ am, pm, intersections }) {
                 key={i}
                 className={suspicious ? 'di-s6-rt__row--warn' : (smoothed ? 'di-s6-rt__row--smoothed' : '')}
               >
-                <td>{a.fromNum} → {a.toNum}</td>
+                <td>{intLabel(byNum.get(String(a.fromNum)), a.fromNum)} → {intLabel(byNum.get(String(a.toNum)), a.toNum)}</td>
                 <td>{a.direction}</td>
                 <td>{mode}</td>
                 <td style={{ textAlign: 'right' }}>
@@ -770,16 +821,16 @@ function IntersectionConvergenceList({
   const pmOk = sorted.filter((it) => pmConv[String(it.num)]).length
 
   const statusText = (am, pm) => {
-    if (am && pm) return `both converged${tol != null ? ` at ${Number(tol).toFixed(2)} veh tol` : ''}`
-    if (!am && !pm) return 'neither converged (max iter)'
-    return `${am ? 'PM' : 'AM'} did not converge (max iter)`
+    if (am && pm) return `both settled${tol != null ? ` (within ${Number(tol).toFixed(2)} veh)` : ''}`
+    if (!am && !pm) return 'neither settled (stopped at the pass limit)'
+    return `${am ? 'PM' : 'AM'} did not settle (stopped at the pass limit)`
   }
 
   return (
     <div className="di-s6-conv">
       <div className="di-s6-conv__head">
         <h3 className="di-s6-conv__title">Per-intersection convergence</h3>
-        <span className="di-s6-conv__summary">AM {amOk}/{total} · PM {pmOk}/{total} converged · {maxIter} max iter</span>
+        <span className="di-s6-conv__summary">AM {amOk}/{total} · PM {pmOk}/{total} settled · limit {maxIter} balancing passes · bar = share of the limit used</span>
       </div>
       <div className="di-s6-conv__list">
         {sorted.map((it) => {
@@ -800,15 +851,15 @@ function IntersectionConvergenceList({
               <div className="di-s6-conv__cell">
                 <span className={`di-s6-conv__dot di-s6-conv__dot--${ok ? 'ok' : 'fail'}`} />
                 <span className="di-s6-conv__detail">
-                  {amI} ({pmI}) iter · {statusText(am, pm)}
+                  AM {amI} · PM {pmI} passes · {statusText(am, pm)}
                 </span>
               </div>
-              <div className="di-s6-conv__bar" title={`Peak ${peakI}/${maxIter} = ${pct}%`}>
+              <div className="di-s6-conv__bar" title={`Used ${peakI} of the ${maxIter}-pass limit (${pct}%)`}>
                 <div
                   className={`di-s6-conv__bar-fill di-s6-conv__bar-fill--${ok ? 'ok' : 'fail'}`}
                   style={{ width: `${pct}%` }}
                 />
-                <span className="di-s6-conv__bar-label">{pct}%</span>
+                <span className="di-s6-conv__bar-label">{pct}% of limit</span>
               </div>
             </div>
           )
@@ -819,7 +870,8 @@ function IntersectionConvergenceList({
 }
 
 // ── Link conservation table — Mode column, tri-color delta, sort by |delta| ─
-function LinkConservationTable({ rows }) {
+function LinkConservationTable({ rows, intersections }) {
+  const byNum = new Map(intersections.map((it) => [String(it.num), it]))
   const sorted = [...rows].sort((x, y) => {
     const xMax = Math.max(Math.abs(x.a.delta ?? 0), Math.abs(x.p?.delta ?? 0))
     const yMax = Math.max(Math.abs(y.a.delta ?? 0), Math.abs(y.p?.delta ?? 0))
@@ -841,7 +893,7 @@ function LinkConservationTable({ rows }) {
           {violations === 0
             ? `${total} links · all balanced ✓`
             : `${total - violations}/${total} balanced · ${violations} with delta > 0.5 veh`}
-          {' · values AM (PM)'}
+          {' · values shown as AM (PM)'}
         </span>
       </div>
       <table className="di-s6-lc__table">
@@ -864,7 +916,7 @@ function LinkConservationTable({ rows }) {
               : 'ok'
             return (
               <tr key={i} className={worst === 'ok' ? '' : 'di-s6-lc__row--warn'}>
-                <td>{a.fromNum} → {a.toNum}</td>
+                <td>{intLabel(byNum.get(String(a.fromNum)), a.fromNum)} → {intLabel(byNum.get(String(a.toNum)), a.toNum)}</td>
                 <td>{a.direction}</td>
                 <td>{a.mode ?? p?.mode ?? '—'}</td>
                 <td style={{ textAlign: 'right' }}>{n0(a.upstream_outflow)} ({n0(p?.upstream_outflow)})</td>
