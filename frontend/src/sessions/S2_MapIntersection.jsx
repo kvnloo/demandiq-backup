@@ -35,6 +35,9 @@ import {
   approachesForControl,
   stopHint,
   incompleteStopControls,
+  incompleteThreeLegs,
+  withMissingLeg,
+  missingLeg,
   STOP_CONTROL_TYPES,
   AUTO_FILL_TYPES,
   ACTIVE_DIRS,
@@ -47,6 +50,8 @@ const PERPENDICULAR = {
 const DIRS = ['EB/WB', 'NB/SB', 'NE/SW', 'NW/SE']
 const CONTROLS = ['Signalized', 'Two-way stop', 'Side-street stop', 'One-way stop', 'All-way stop', 'Roundabout']
 const LEGS = ['3-leg', '4-leg']
+// An approach is named by travel direction: the NB approach comes from the south leg.
+const APPROACH_FROM = { NB: 'south', SB: 'north', EB: 'west', WB: 'east' }
 
 const newId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -75,6 +80,17 @@ export default function S2_MapIntersection() {
   // Hard gate: a stop control with zero approaches selected would ship a stop-
   // less diagram. Block Continue until every stop control has at least one.
   const stopBlockers = incompleteStopControls(intersections)
+  const legBlockers = incompleteThreeLegs(intersections)
+  // A Single Intersection project is complete with one pin; corridors need two.
+  const minCount = snap.project?.projectType === 'Single Intersection' ? 1 : 2
+  // Count files and Jev match intersections by name, so duplicates are risky.
+  const seenNames = new Map()
+  for (const it of intersections) {
+    const k = (it.name || '').trim().toLowerCase()
+    if (k) seenNames.set(k, [...(seenNames.get(k) ?? []), it.num])
+  }
+  const dupNames = [...seenNames.values()].filter((nums) => nums.length > 1)
+  const [renumber, setRenumber] = useState(null) // { dir, sorted } while the renumber notice is open
   const undoable = canUndo()
   const redoable = canRedo()
 
@@ -105,14 +121,14 @@ export default function S2_MapIntersection() {
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current) }, [])
 
   // ── Mutations (each snapshots history BEFORE committing) ───────────────
-  const addIntersection = (lat, lng, form) => {
+  const addIntersection = (lat, lng, form, missing = null) => {
     pushHistory()
     // Seed the canonical approach shape at creation so the Inspector's stop-leg
     // checkboxes have something to bind to (S3 still default-fills any older pin
     // that lacks approaches). All four legs exist by default; S3 toggles exists.
     // Apply the stop-control rules for the chosen control up front, so a pin
     // created directly as All-way / Two-way stop already carries correct flags.
-    const approaches = approachesForControl(defaultApproaches(), form.control, corridorDir)
+    const approaches = approachesForControl(withMissingLeg(defaultApproaches(), missing), form.control, corridorDir)
     persistIntersections([
       ...intersections,
       { id: newId(), num: intersections.length + 1, lat, lng, ...form, approaches },
@@ -189,12 +205,16 @@ export default function S2_MapIntersection() {
       )
     }
     const key = `${latlng.lat},${latlng.lng}`
+    // Main-street direction follows the corridor the pins are laid along, so a
+    // N–S corridor's pins don't default to EB/WB (which swaps street names).
+    const along = intersections.length > 0 ? detectCorridorDir([...intersections, latlng]) : corridorDir
+    const mainDir = along === 'NS' || along === 'NB/SB' ? 'NB/SB' : 'EB/WB'
     setDraft({
       lat: latlng.lat, lng: latlng.lng,
       pt: pt || { x: 120, y: 120 },
       key,
-      name: '', control: 'Signalized', legs: '4-leg',
-      mainDir: 'EB/WB', crossDir: 'NB/SB',
+      name: '', control: 'Signalized', legs: '4-leg', missingLeg: '',
+      mainDir, crossDir: PERPENDICULAR[mainDir],
       geocodeFailed: false, skewDeg,
     })
     reverseGeocode(latlng.lat, latlng.lng)
@@ -217,7 +237,7 @@ export default function S2_MapIntersection() {
         crossStreet: parts[1] || '',
         mainDir: draft.mainDir,
         crossDir: draft.crossDir,
-      })
+      }, draft.legs === '3-leg' ? draft.missingLeg : null)
       setDraft(null)   // sticky: addMode stays lit for the next placement
     } catch (err) {
       showToast(`Failed to add intersection: ${err?.message || err}`)
@@ -264,17 +284,31 @@ export default function S2_MapIntersection() {
     if (it) deleteIntersectionById(it.id)
   }
 
+  const canContinue = intersections.length >= minCount && stopBlockers.length === 0 && legBlockers.length === 0
+
+  // Continue numbers intersections along the corridor. When that would change
+  // anyone's number, show the new order first and let the engineer keep theirs
+  // — a silent renumber sends Int#-keyed pastes to the wrong intersection.
   const handleContinue = () => {
-    if (intersections.length < 2 || stopBlockers.length > 0) return // gated; see footer
+    if (!canContinue) return // gated; see footer
     const dir = detectCorridorDir(intersections)
     const sorted = sortAlongCorridor(intersections, dir).map((it, i) => ({ ...it, num: i + 1 }))
-    pushHistory()
-    persistIntersections(sorted)
+    const byId = new Map(intersections.map((it) => [it.id, it.num]))
+    if (sorted.some((it) => byId.get(it.id) !== it.num)) { setRenumber({ dir, sorted }); return }
+    finishContinue(dir, null)
+  }
+
+  const finishContinue = (dir, sorted) => {
+    setRenumber(null)
+    if (sorted) { pushHistory(); persistIntersections(sorted) }
     setCorridorDir(dir)
     navigate('/approaches')
   }
 
-  const resetProject = () => { clearProject(); window.location.assign('/') }
+  const resetProject = () => {
+    if (!window.confirm('Reset the project? Everything in it is deleted from this browser and cannot be undone. Download the project file first (New project → Download project file) if you need it.')) return
+    clearProject(); window.location.assign('/')
+  }
 
   // ── Keyboard layer ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -408,8 +442,11 @@ export default function S2_MapIntersection() {
         onRemove={handleRemoveByIndex}
         onReorder={handleReorder}
         onContinue={handleContinue}
-        canContinue={intersections.length >= 2 && stopBlockers.length === 0}
+        canContinue={canContinue}
+        minCount={minCount}
         stopBlockers={stopBlockers}
+        legBlockers={legBlockers}
+        dupNames={dupNames}
         inspector={
           <Inspector
             intersection={selIntersection}
@@ -425,6 +462,35 @@ export default function S2_MapIntersection() {
           />
         }
       />
+      {renumber && (
+        <div className="di-modal-backdrop">
+          <div className="di-modal" role="dialog" aria-modal="true" aria-labelledby="di-renum-title">
+            <div className="di-modal__header">
+              <h2 id="di-renum-title" className="di-modal__title">Number the intersections along the corridor?</h2>
+            </div>
+            <div className="di-modal__body">
+              <p style={{ fontSize: 13, margin: '0 0 8px', lineHeight: 1.5 }}>
+                Listed {renumber.dir === 'NS' ? 'south to north' : 'west to east'}, the intersections would be numbered:
+              </p>
+              <ol className="di-renum-list">
+                {renumber.sorted.map((it) => {
+                  const was = intersections.find((x) => x.id === it.id)?.num
+                  return (
+                    <li key={it.id}>
+                      {it.num}. {it.name || 'Unnamed'}{was !== it.num ? ` (was ${was})` : ''}
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+            <div className="di-modal__footer">
+              <button type="button" className="di-btn-secondary" onClick={() => setRenumber(null)}>Back</button>
+              <button type="button" className="di-btn-secondary" onClick={() => finishContinue(renumber.dir, null)}>Keep my numbering</button>
+              <button type="button" className="di-btn-primary" onClick={() => finishContinue(renumber.dir, renumber.sorted)}>Renumber and continue</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -440,7 +506,7 @@ function AddPopover({ draft, onChange, onCommit, onCancel }) {
     return () => document.removeEventListener('mousedown', onDown)
   }, [onCancel])
 
-  const canAdd = draft.name.trim().length > 0
+  const canAdd = draft.name.trim().length > 0 && (draft.legs !== '3-leg' || Boolean(draft.missingLeg))
   // Clamp the anchor so the card stays on screen near the drop point.
   const left = Math.min(Math.max(draft.pt.x, 150), 9999)
 
@@ -475,6 +541,9 @@ function AddPopover({ draft, onChange, onCommit, onCancel }) {
       />
       <Segmented label="Control" value={draft.control} options={CONTROLS} onSelect={(v) => onChange({ control: v })} />
       <Segmented label="Legs" value={draft.legs} options={LEGS} onSelect={(v) => onChange({ legs: v })} />
+      {draft.legs === '3-leg' && (
+        <MissingLegSelect value={draft.missingLeg} onChange={(d) => onChange({ missingLeg: d })} className="di-add-pop__row" />
+      )}
       <label className="di-add-pop__row">
         <span>Direction</span>
         <select
@@ -589,7 +658,18 @@ function Inspector({
         </div>
       )}
       <Segmented label="Legs" value={intersection.legs} options={LEGS}
-        onSelect={(v) => onUpdateIntersection(intersection.id, { legs: v })} />
+        onSelect={(v) => onUpdateIntersection(intersection.id, v === '4-leg'
+          ? { legs: v, approaches: approachesForControl(withMissingLeg(approaches, null), control, corridorDir) }
+          : { legs: v })} />
+      {intersection.legs === '3-leg' && (
+        <MissingLegSelect
+          className="di-inspector__row"
+          value={missingLeg(approaches) ?? ''}
+          onChange={(d) => onUpdateIntersection(intersection.id, {
+            approaches: approachesForControl(withMissingLeg(approaches, d), control, corridorDir),
+          })}
+        />
+      )}
       <label className="di-inspector__row">
         <span>Direction</span>
         <select
@@ -634,6 +714,20 @@ function NameField({ value, onCommit }) {
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
       />
+    </label>
+  )
+}
+
+// Which approach a 3-leg intersection lacks. Required: the grid, balancing and
+// diagrams all treat a leg as present until it is marked missing.
+function MissingLegSelect({ value, onChange, className }) {
+  return (
+    <label className={className}>
+      <span>Missing approach</span>
+      <select className="di-select" value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={!value || undefined}>
+        <option value="" disabled>Pick the missing leg…</option>
+        {ACTIVE_DIRS.map((d) => <option key={d} value={d}>{d} (no {APPROACH_FROM[d]} leg)</option>)}
+      </select>
     </label>
   )
 }

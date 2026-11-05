@@ -421,6 +421,8 @@
   text-decoration: underline;
 }
 .di-side__hint-link:hover { color: var(--accent-hover); }
+/* S2 renumber notice: the proposed corridor order. */
+.di-renum-list { margin: 0; padding-left: 4px; list-style: none; font-size: 13px; line-height: 1.7; max-height: 50vh; overflow: auto; }
 
 .di-int {
   display: flex;
