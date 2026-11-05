@@ -87,7 +87,7 @@ function buildPayload(intersections, balancing, links) {
     link_resolution_method: balancing.linkResolution ?? 'larger',
     max_iterations: balancing.maxIterations ?? 100,
     // S5 convergence threshold (veh) wired through. Previously hardcoded 0.5.
-    tolerance: balancing.convergenceThreshold ?? 0.5,
+    tolerance: balancing.convergenceThreshold >= 0.1 ? balancing.convergenceThreshold : 0.5,   // veh; old % projects stored 0.01
   }
 }
 

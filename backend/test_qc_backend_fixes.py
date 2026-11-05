@@ -353,6 +353,29 @@ def test_health_stays_fast_during_heavy_request():
         server.should_exit = True
 
 
+def test_diagram_skips_empty_uturn_and_missing_leg_arrows():
+    import line_diagram as ld
+    drawn = []
+    real = ld._dg_arrow
+    ld._dg_arrow = lambda ax, pts, **k: drawn.append(1)
+    try:
+        lanes = lambda ap, *a: [(m, 0.5, 0.5) for m in ("L", "T", "R", "U")]   # noqa: E731
+        real_lanes, ld._dg_lane_positions = ld._dg_lane_positions, lanes
+        p = {"s": 0.1, "lw": 1, "hw": 0.01, "hl": 0.01, "fs_vol": 6}
+        class Ax:
+            def text(self, *a, **k): pass
+        # T-intersection without a north leg (no 'SB' approach): EB left would head north
+        ld._dg_draw_approach(Ax(), "EB", 0.5, 0.5, {"EBT": 100, "EBR": 50}, {"EBT": 100, "EBR": 50},
+                             p, lambda u, b: (str(b), "#000"), None, ["NB", "EB", "WB"])
+        assert len(drawn) == 2, drawn          # T and R only: no 0 (0) U-turn, no left into the missing leg
+        drawn.clear()
+        ld._dg_draw_approach(Ax(), "EB", 0.5, 0.5, {"EBU": 5}, {"EBU": 5}, p,
+                             lambda u, b: (str(b), "#000"), None, ["NB", "SB", "EB", "WB"])
+        assert len(drawn) == 4                 # counted U-turn kept; empty L/T/R kept on a 4-leg
+    finally:
+        ld._dg_arrow, ld._dg_lane_positions = real, real_lanes
+
+
 if __name__ == "__main__":
     tests = [v for k, v in list(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
