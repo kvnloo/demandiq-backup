@@ -21,7 +21,11 @@ fields degrade gracefully (missing fields render as '—' rather than crashing).
 """
 
 import io
+from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+from openpyxl.comments import Comment
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
@@ -38,7 +42,7 @@ SUB_FONT  = Font(name='Arial', bold=True, color='000000', size=10)
 DATA_FONT = Font(name='Arial', color='000000', size=10)
 # Combined View / Raw Movements: red text for a negative delta (movement
 # dropped below raw); amber fill marks drops on Raw Movements; light yellow
-# fill marks engineer overrides (matches the "*" suffix convention).
+# fill (plus an "Engineer override" cell note) marks engineer overrides.
 NEG_FONT  = Font(name='Arial', color='C00000', size=10)
 OVR_FILL  = PatternFill('solid', fgColor='FFF2CC')
 DROP_FILL = PatternFill('solid', fgColor='FFE5B4')
@@ -152,6 +156,67 @@ def _yn(b):
     return MISSING
 
 
+def _readable_date(v):
+    """'2026-11-05' → 'Nov 5, 2026'; anything else shown as given."""
+    if not v:
+        return MISSING
+    try:
+        d = date.fromisoformat(str(v)[:10])
+    except ValueError:
+        return str(v)
+    return f"{d:%b} {d.day}, {d.year}"
+
+
+def _local_time(ts, tz_name=None):
+    """ISO UTC timestamp → 'Nov 5, 2026 1:12 PM PST' in the user's zone."""
+    if not ts:
+        return MISSING
+    try:
+        t = datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
+    except ValueError:
+        return str(ts)
+    # shortcut: defaults to Pacific (the current client base) when the browser sends no zone.
+    try:
+        t = t.astimezone(ZoneInfo(tz_name or 'America/Los_Angeles'))
+    except Exception:
+        pass                    # unknown zone / no tz database: keep UTC
+    hour = t.hour % 12 or 12
+    return f"{t:%b} {t.day}, {t.year} {hour}:{t:%M} {t:%p} {t.tzname() or ''}".strip()
+
+
+# ── Untrusted text (names come from users and from LLM-read vendor PDFs) ─────
+_FORMULA_START = ('=', '+', '-', '@', '\t', '\r')
+
+
+def strip_illegal_chars(obj):
+    """Copy of a JSON-like payload with control characters removed from every
+    string. openpyxl raises IllegalCharacterError on them at assignment time,
+    so this must run before any cell is written."""
+    if isinstance(obj, str):
+        return ILLEGAL_CHARACTERS_RE.sub('', obj)
+    if isinstance(obj, dict):
+        return {k: strip_illegal_chars(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [strip_illegal_chars(v) for v in obj]
+    return obj
+
+
+def workbook_bytes(wb):
+    """Save to bytes with every formula-looking string stored as literal text,
+    so a name like '=HYPERLINK(...)' can never run in Excel. DemandIQ writes
+    no formulas of its own."""
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                v = cell.value
+                if isinstance(v, str) and v.startswith(_FORMULA_START):
+                    cell.data_type = 's'
+                    cell.quotePrefix = True
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 # ── Tab 1: Provenance ────────────────────────────────────────────────────────
 def _write_provenance(wb, project_state):
     """Auditable run header + per-intersection convergence + QC flags.
@@ -172,7 +237,7 @@ def _write_provenance(wb, project_state):
     # to current balancing only for fields that aren't run-snapshotted.
     cfg = last_run.get('config') or {}
 
-    run_at = last_run.get('timestamp') or MISSING
+    run_at = _local_time(last_run.get('timestamp'), project_state.get('timezone'))
     method = _method_label(cfg.get('linkResolution') or last_run.get('method'))
     peak_mode = cfg.get('peakMode') or balancing.get('peakMode') or MISSING
     am_window = _window_str(cfg.get('amWindow') or balancing.get('amWindow'))
@@ -185,6 +250,9 @@ def _write_provenance(wb, project_state):
     # ── Header block ────────────────────────────────────────────────────
     header_rows = [
         ('Project',         project.get('name', '') or MISSING),
+        ('Client',          project.get('client') or MISSING),
+        ('Analyst',         project.get('analyst') or MISSING),
+        ('Date',            _readable_date(project.get('date'))),
         ('Run at',          run_at),
         ('Method',          method),
         ('Direction',       direction),
@@ -338,8 +406,9 @@ def _write_provenance(wb, project_state):
 def _write_combined_view(wb, intersections, overrides):
     """Stage 10.2: raw + balanced (final) side-by-side, per intersection.
     Columns: Movement | AM Raw | AM Balanced | AM Δ | PM Raw | PM Balanced | PM Δ.
-    Δ = Balanced − Raw (red when negative). Override balanced cells carry a
-    light fill + "*" suffix. Each section ends in a TOTAL subtotal row."""
+    Δ = Balanced − Raw (red when negative). Override balanced cells stay
+    numeric, with a light fill + "Engineer override" note. Each section ends
+    in a TOTAL subtotal row."""
     ws = wb.create_sheet('Combined View')
     headers = ['Movement', 'AM Raw', 'AM Balanced', 'AM Δ',
                'PM Raw', 'PM Balanced', 'PM Δ']
@@ -383,9 +452,12 @@ def _write_combined_view(wb, intersections, overrides):
                 _style_data(ws.cell(row=r, column=col, value=raw), fmt='0')
                 bcell = ws.cell(row=r, column=col + 1)
                 if is_ovr and bal is not None:
-                    bcell.value = f"{bal}*"
-                    _style_data(bcell, align=CENTER)
+                    # Numeric so SUM and copy-paste into Synchro work; the
+                    # fill + note mark it as an engineer override.
+                    bcell.value = bal
+                    _style_data(bcell, fmt='0')
                     bcell.fill = OVR_FILL
+                    bcell.comment = Comment('Engineer override', 'DemandIQ')
                 else:
                     bcell.value = bal
                     _style_data(bcell, fmt='0')
@@ -724,6 +796,7 @@ def build_workbook(project_state):
     three-tab schema). No per-intersection tabs; no legacy convergence/
     adjustments sheets (those reads were dead in the NCHRP era).
     """
+    project_state = strip_illegal_chars(project_state)
     intersections = project_state.get('intersections') or []
     overrides = ((project_state.get('balancing') or {}).get('overrides')) or {'AM': {}, 'PM': {}}
 
@@ -739,7 +812,4 @@ def build_workbook(project_state):
     # project carries forecasting results; otherwise a no-op (schema unchanged).
     _write_corridor_vmt(wb, project_state)
 
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return buf.read()
+    return workbook_bytes(wb)
