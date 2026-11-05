@@ -12,6 +12,9 @@ const fileInfo = new Map()
 const SLOTS = { base: 'Base-year model file', horizon: 'Horizon-year model file' }
 
 // What each column is for, in plain words. `req` = needed to run.
+// shown open; everything else folds under 'More columns'
+const MAIN_ROLES = new Set(['am_ab', 'am_ba', 'pm_ab', 'pm_ba', 'name'])
+
 const ROLES = [
   { key: 'am_ab', label: 'Morning peak volume, A→B direction', req: true,
     help: 'Vehicles over the whole AM model period, from the start node to the end node.' },
@@ -222,7 +225,6 @@ function FileSlot({ network, intersections, onNetwork }) {
             <span className="di-up__drop-text">
               {network.fileName || 'Model file'}
               {network.featureCount != null && <> · {Number(network.featureCount).toLocaleString()} road links</>}
-              {info?.crs && <> · {info.crs}</>}
             </span>
             <span className="di-up__drop-hint">Drop or click to replace</span>
           </>
@@ -274,7 +276,27 @@ function ColumnCheck({ title, network, needsPm, onChange }) {
           <tr><th>What DemandIQ needs</th><th>Column in your file</th><th>Example</th></tr>
         </thead>
         <tbody>
-          {ROLES.map((r) => {
+          {ROLES.filter((r) => MAIN_ROLES.has(r.key)).map(row)}
+        </tbody>
+      </table>
+      {/* optional columns stay folded unless one needs a look */}
+      <details className="di-fc-map__more" open={ROLES.some((r) => !MAIN_ROLES.has(r.key) && needsLook(r))}>
+        <summary>More columns (optional) — {ROLES.filter((r) => !MAIN_ROLES.has(r.key) && m[r.key]).length} found</summary>
+        <table>
+          <tbody>
+            {ROLES.filter((r) => !MAIN_ROLES.has(r.key)).map(row)}
+          </tbody>
+        </table>
+      </details>
+    </div>
+  )
+
+  function needsLook(r) {
+    const v = m[r.key]
+    return (v && info?.confidence?.[r.key] === 'low') || (!v && (r.req || (r.key === 'pm_ab' && needsPm)))
+  }
+
+  function row(r) {
             const v = m[r.key] ?? ''
             const low = v && info?.confidence?.[r.key] === 'low'
             const missing = !v && (r.req || (r.key === 'pm_ab' && needsPm))
@@ -317,9 +339,5 @@ function ColumnCheck({ title, network, needsPm, onChange }) {
                 </td>
               </tr>
             )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
+  }
 }

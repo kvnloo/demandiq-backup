@@ -587,3 +587,9 @@
   color: var(--signal-amber);
 }
 .di-fc-map__flag--req { background: rgba(239, 68, 68, 0.10); color: var(--signal-red); }
+
+.di-fc-map__more { margin-top: 10px; }
+.di-fc-map__more > summary { cursor: pointer; font-size: 13px; color: var(--text-2, inherit); padding: 6px 0; }
+.di-fc-map table { width: 100%; table-layout: fixed; }
+.di-fc-map td:nth-child(1), .di-fc-map th:nth-child(1) { width: 52%; }
+.di-fc-map td:nth-child(2), .di-fc-map th:nth-child(2) { width: 32%; }
