@@ -47,6 +47,7 @@ from line_diagram import (
     DPI,
 )
 from excel_export import build_workbook
+import jev
 from forecasting.api import router as forecasting_router
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -175,6 +176,19 @@ async def extract_endpoint(files: list[UploadFile] = File(...)):
                 pass
 
     return JSONResponse({"results": results, "errors": errors})
+
+
+@app.post("/suggest-matches", dependencies=[Depends(require_auth)])
+async def suggest_matches(payload: dict):
+    """Jev suggestions for extracted intersection names the UI couldn't match.
+    {names: [str], candidates: [str]} → {available, suggestions: [{choice, p} | null]}."""
+    names, candidates = payload.get("names"), payload.get("candidates")
+    if not isinstance(names, list) or not isinstance(candidates, list):
+        raise HTTPException(status_code=400, detail="names and candidates must be lists")
+    if not jev.available():
+        return {"available": False, "suggestions": [None] * len(names)}
+    return {"available": True,
+            "suggestions": jev.suggest([str(n or "") for n in names], [str(c or "") for c in candidates])}
 
 
 @app.post("/excel", dependencies=[Depends(require_auth)])

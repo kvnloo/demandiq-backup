@@ -17,6 +17,7 @@ TESTS=(
   test_e2e_bodger
   test_capture
   test_balancer_regressions
+  test_jev
 )
 
 fails=0
