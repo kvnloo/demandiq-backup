@@ -2,7 +2,8 @@ import { useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
 import { Sun, Moon } from 'lucide-react'
 import { getStoredTheme, applyTheme, otherTheme } from '../lib/theme'
-import { subscribe, getSnapshot, clearProject } from '../store/projectStore'
+import { subscribe, getSnapshot } from '../store/projectStore'
+import NewProjectDialog from './NewProjectDialog'
 // Pulled in so the confirm modal + buttons are styled even on routes (e.g. S1)
 // whose own modules don't import these sheets.
 import '../styles/forms.css'
@@ -25,14 +26,6 @@ export default function TopBar() {
       : name
   } else {
     display = 'Untitled Project'
-  }
-
-  // Globally-reachable reset: clear persisted + in-memory project state, then
-  // hard-reload to S1 so every session's component-local state resets cleanly.
-  // Reachable from S1–S8 because TopBar renders outside <Routes> in App.jsx.
-  const handleNewProject = () => {
-    clearProject()
-    window.location.assign('/')
   }
 
   return (
@@ -62,36 +55,7 @@ export default function TopBar() {
         New project
       </button>
 
-      {confirmOpen && (
-        <div className="di-modal-backdrop">
-          <div className="di-modal" role="dialog" aria-modal="true">
-            <div className="di-modal__header">
-              <h2 className="di-modal__title">Start a new project?</h2>
-            </div>
-            <div className="di-modal__body">
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.55 }}>
-                Discard the current project and start fresh? This cannot be undone.
-              </p>
-            </div>
-            <div className="di-modal__footer">
-              <button
-                type="button"
-                className="di-btn-secondary"
-                onClick={() => setConfirmOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="di-btn-primary"
-                onClick={handleNewProject}
-              >
-                Discard &amp; start fresh
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirmOpen && <NewProjectDialog onCancel={() => setConfirmOpen(false)} />}
     </header>
   )
 }
