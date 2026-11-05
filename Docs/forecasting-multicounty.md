@@ -220,3 +220,31 @@ other engine code should need to change for a SANDAG-shaped model.
 Benchmark with a known answer: `python -m forecasting.benchmark out.json 20
 ../frontend/public/methods-guide.html` rebuilds the results tables in the
 in-app guide (`/methods-guide.html`).
+
+---
+
+## The engineer's own model file (region `UPLOAD`) — BUILT
+
+Any MPO's loaded highway network, uploaded per project instead of a server file.
+
+1. `POST /forecast/upload-network` (multipart `files` = a .zip, or the .shp/.shx/.dbf/.prj[/.cpg]
+   parts, or one .gpkg / .geojson; optional `intersections` JSON). Streamed to a private temp
+   dir (`$TMPDIR/demandiq-uploads/<random token>/layer.<ext>` — client file names never reach
+   the filesystem; zip member paths are ignored). Checks: line geometry, a CRS (.prj required),
+   readable. Reads only the schema + 5 rows. Returns `upload_id`, feature count, CRS, WGS84
+   bounds, `intersections_outside`, fields (type + one sample), distinct values of the class
+   column, and a guessed `mapping` with `confidence` per role (`forecasting/upload.py`:
+   SANDAG / MTC exact schemas first, then name heuristics). Cap: 500 MB request
+   (`MAX_NETWORK_UPLOAD_BYTES`, app.py middleware), 1 GB unzipped. TTL 2 h, cleaned lazily.
+2. `POST /forecast/ingest-match` with `region: "UPLOAD"` and
+   `networks: [{role, scenario_year, upload_id, mapping}]` → `adapters/generic.py` reads a padded
+   bbox, applies the mapping (two-way AB/BA columns, or one-way records paired like MTC; node
+   ids from columns or from rounded end points), drops connector values, reprojects to 4326.
+   Same `NetworkLayer` as SANDAG/MTC; the engine is unchanged. Uploads are deleted after a
+   successful ingest — the clipped layers are what the project keeps.
+
+Mapping roles: `am_ab` (required), `am_ba`, `pm_ab`, `pm_ba`, `from_node`, `to_node`, `link_id`,
+`daily` (both directions), `length_mi`, `name`, `lanes_ab`, `lanes_ba`, `fclass`,
+`connector_field` + `connector_values`. Cube `.net` binaries can't be read — export the loaded
+network to a shapefile. Equivalence with the built-in SANDAG adapter is pinned by
+`tests/forecasting/test_upload_network.py` on clipped real 2025/2050 fixtures.

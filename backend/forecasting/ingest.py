@@ -24,6 +24,8 @@ corrupting the refinement join.
 
 from pathlib import Path
 
+from forecasting import upload
+from forecasting.adapters.generic import ingest_upload
 from forecasting.adapters.hpms import ingest_hpms
 from forecasting.adapters.mtc import ingest_mtc
 from forecasting.adapters.sandag import ingest_sandag
@@ -44,6 +46,7 @@ ADAPTERS = {
     "SANDAG": ingest_sandag,
     "HPMS_CA": ingest_hpms,
     "MTC": ingest_mtc,        # Bay Area; file picked server-side by model year
+    "UPLOAD": ingest_upload,  # the engineer's own model file (upload id + column mapping)
 }
 # Server-side SANDAG network assets live under the repo's data/ dir (gitignored),
 # one file per model year: data/sandag/hwyLoad_<year>.shp. Like MTC, the file is
@@ -97,6 +100,8 @@ def ingest_networks(
             { "role": "base"|"horizon", "scenario_year": int, "path"?: shp_path }
             `path` is for tests/tools only; without it SANDAG picks
             data/sandag/hwyLoad_<scenario_year>.shp (the API never passes one).
+            UPLOAD specs carry "upload_id" + "mapping" instead; the uploads are
+            deleted once every layer is ingested.
         region: a key of ADAPTERS — "SANDAG" (model file) or "HPMS_CA" (statewide, live).
         filter_radius_ft: passed through to the adapter (default 300).
         min_overlap: minimum base→horizon link_id overlap fraction required when
@@ -128,10 +133,15 @@ def ingest_networks(
             raise ValueError(f"ingest_networks: duplicate network role {role!r}")
         if "scenario_year" not in spec:
             raise ValueError(f"ingest_networks: network role {role!r} missing 'scenario_year'")
-        path = spec.get("path") or (sandag_path(spec["scenario_year"]) if region == "SANDAG" else "live")
+        kw = {}
+        if region == "UPLOAD":
+            path = upload.resolve(spec.get("upload_id"))
+            kw["mapping"] = upload.check_mapping(spec.get("mapping"), upload.fields_of(spec["upload_id"]))
+        else:
+            path = spec.get("path") or (sandag_path(spec["scenario_year"]) if region == "SANDAG" else "live")
         layers[role] = adapter(
             path, spec["scenario_year"], project_intersections_4326,
-            filter_radius_ft=filter_radius_ft,
+            filter_radius_ft=filter_radius_ft, **kw,
         )
 
     if "base" in layers and "horizon" in layers:
@@ -144,4 +154,7 @@ def ingest_networks(
                 "between series). Refinement joins by link_id and would be unreliable."
             )
 
+    if region == "UPLOAD":   # the clipped layers are what the project keeps
+        for spec in networks:
+            upload.delete(spec.get("upload_id"))
     return layers

@@ -77,6 +77,8 @@ MAX_EXTRACT_FILES = 50
 MAX_EXTRACT_FILE_BYTES = 25 * 1024 * 1024
 # shortcut: /extract total capped at 200 MB rather than 50 x 25 MB; raise if users batch more.
 MAX_EXTRACT_BODY_BYTES = 200 * 1024 * 1024
+# An agency's loaded network, zipped (streamed to disk, never held in memory).
+MAX_NETWORK_UPLOAD_BYTES = 500 * 1024 * 1024
 MAX_DIAGRAM_CELLS = 200
 MAX_VOLUME = 20000   # veh/h for one movement; anything larger is a typo
 
@@ -98,7 +100,9 @@ class BodySizeLimitMiddleware:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
-        limit = MAX_EXTRACT_BODY_BYTES if path.rstrip("/").endswith("/extract") else MAX_BODY_BYTES
+        p = path.rstrip("/")
+        limit = (MAX_EXTRACT_BODY_BYTES if p.endswith("/extract") else
+                 MAX_NETWORK_UPLOAD_BYTES if p.endswith("/forecast/upload-network") else MAX_BODY_BYTES)
         headers = dict(scope.get("headers") or [])
         try:
             declared = int(headers.get(b"content-length", b"0"))
