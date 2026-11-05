@@ -21,6 +21,7 @@ fields degrade gracefully (missing fields render as '—' rather than crashing).
 """
 
 import io
+import math
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
@@ -743,3 +744,166 @@ def build_workbook(project_state):
     wb.save(buf)
     buf.seek(0)
     return buf.read()
+
+
+# ── Forecast workbook (Forecasting F1–F4) ────────────────────────────────────
+# Separate from build_workbook: the forecast deliverable is its own file. Every
+# number is read VERBATIM from the /forecast/run response F4 renders, so the
+# workbook and F4 can never disagree. Labels come from forecasting.run — the
+# settings the results were actually run under — never the current F1/F3 form.
+FC_MOVEMENTS = ('NBL', 'NBT', 'NBR', 'SBL', 'SBT', 'SBR', 'EBL', 'EBT', 'EBR', 'WBL', 'WBT', 'WBR')
+FC_LINK_METHODS = {
+    'ratio': 'Ratio (growth)', 'difference': 'Difference (incremental)',
+    'combined': 'Average of ratio and difference', 'weighted': 'Weighted growth',
+    'modified_average': 'Modified average', 'nchrp765': 'Auto — NCHRP 765 rule',
+    'odot': 'Auto — ODOT decision tree', 'trend': 'Historical trend (no model)',
+    'rate': 'Growth rate entered (no model)',
+}
+FC_TURN_METHODS = {'furness': 'NCHRP standard (Furness, then corridor balance)',
+                   'fratar': 'Trip table — Fratar', 'fuzzy': 'Trip table — fuzzy'}
+FC_MODEL = {'SANDAG': ('SANDAG (San Diego)', 'hwyLoad_{y}.shp', 'AM 6–9 am (3 h), PM 3:30–7 pm (3.5 h)'),
+            'MTC': ('MTC Travel Model One (Bay Area)', 'mtc/{y}/network_links.shp', 'AM 6–10 am (4 h), PM 3–7 pm (4 h)')}
+
+
+def _js_round(v):
+    """Math.round, so workbook integers match F4 exactly (Python round() is banker's)."""
+    return int(math.floor(float(v) + 0.5))
+
+
+def forecast_notes(pdata):
+    """Distinct run notes for one period: [(code, message, [where...])] — the
+    same flags F3/F4 show (leg-level, inbound/outbound, Pass 1, Pass 2)."""
+    by = {}
+
+    def add(f, where):
+        key = (f.get('code') or f.get('check') or '', f.get('message') or '')
+        by.setdefault(key, []).append(where)
+
+    for r in pdata.get('refinement') or []:
+        n = r.get('intersection_num')
+        for d in ('NB', 'SB', 'EB', 'WB'):
+            leg = (r.get('approaches') or {}).get(d) or {}
+            for f in leg.get('flags') or []:
+                add(f, f'Int {n} {d}')
+            for io in ('inbound', 'outbound'):
+                for f in (leg.get(io) or {}).get('flags') or []:
+                    add(f, f"Int {n} {d} {'in' if io == 'inbound' else 'out'}")
+    for n, m in ((pdata.get('pass1') or {}).get('meta') or {}).items():
+        for f in (m or {}).get('flags') or []:
+            add(f, f'Int {n}')
+    for f in (pdata.get('pass2') or {}).get('qc_flags') or []:
+        add(f, f"Int {f.get('int')}" if f.get('int') else 'corridor')
+    return [(c, m, w) for (c, m), w in by.items()]
+
+
+def build_forecast_workbook(project_state):
+    """Forecast deliverable → .xlsx bytes. Tabs: Forecast Summary, Forecast TMCs,
+    then Corridor VMT when the run carries VMT."""
+    fc = project_state.get('forecasting') or {}
+    results = fc.get('results') or {}
+    run = fc.get('run') or {}
+    st = run.get('settings') or fc.get('settings') or {}
+    region = run.get('region') or fc.get('region') or 'SANDAG'
+    rm, tm = st.get('refineMethod') or 'ratio', st.get('turnMethod') or 'furness'
+    no_model = rm in ('trend', 'rate')
+    model_name, file_pat, periods_txt = FC_MODEL.get(region, (region, '{y}', MISSING))
+    years = run.get('modelYears') or {}
+    names = {it.get('num'): it for it in project_state.get('intersections') or []}
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    # ── Summary ──────────────────────────────────────────────────────────
+    ws = wb.create_sheet('Forecast Summary')
+    k = st.get('peakHourFactor')
+    rows = [
+        ('Project', (project_state.get('project') or {}).get('name') or MISSING),
+        ('Count year', run.get('baseYear') or fc.get('baseYear') or MISSING),
+        ('Forecast (horizon) year', run.get('horizonYear') or fc.get('horizonYear') or MISSING),
+        ('How each road grows', FC_LINK_METHODS.get(rm, rm)),
+        ('How turns are formed', FC_TURN_METHODS.get(tm, tm)),
+    ]
+    if no_model:
+        rows.append(('Travel model', 'none — no-model growth'))
+        if rm == 'rate':
+            rows.append(('Growth rate (% per year, straight line)', st.get('growthRate')))
+        else:
+            rows.append(('Past counts (year, volume)', (st.get('trendText') or '').strip() or MISSING))
+    else:
+        rows += [
+            ('Travel model', model_name),
+            ('Model files used', ', '.join(
+                f"{file_pat.format(y=years[r])} ({r}, {years[r]})" for r in ('base', 'horizon') if years.get(r))
+                or MISSING),
+            ('Model periods', periods_txt),
+            ('K — peak hour ÷ model period', k if k not in (None, '') else 'not given (Ratio needs no K)'),
+        ]
+    if tm == 'furness':
+        rows.append(('Link disagreement resolution', _method_label(st.get('method') or 'larger')))
+    if tm == 'fuzzy':
+        rows.append(('Fuzzy band (± %)', st.get('fuzzyBand')))
+    rows += [
+        ('Rounding', 'Future volumes rounded once per NCHRP 765 Table 4-8 (<100 → 10, <1,000 → 50, '
+                     '<10,000 → 100, else 500/1,000). Δ = unrounded future − existing.'),
+        ('Units', 'vehicles per peak hour (vph)'),
+    ]
+    for r_, (label, value) in enumerate(rows, start=1):
+        _style_subheader(ws.cell(row=r_, column=1, value=label))
+        _style_data(ws.cell(row=r_, column=2, value=value), align=LEFT)
+
+    r_ = len(rows) + 2
+    for col, h in enumerate(('Period', 'Note', 'Code', 'Where'), start=1):
+        _style_header(ws.cell(row=r_, column=col, value=h))
+    for p in ('AM', 'PM'):
+        if p not in results:
+            continue
+        for code, msg, where in forecast_notes(results[p]):
+            r_ += 1
+            where_txt = f'{len(where)} places' if len(where) > 6 else ', '.join(map(str, where))
+            for col, v in enumerate((p, msg, code, where_txt), start=1):
+                _style_data(ws.cell(row=r_, column=col, value=v), align=LEFT)
+    ws.column_dimensions['A'].width = 34
+    ws.column_dimensions['B'].width = 90
+    ws.column_dimensions['C'].width = 30
+    ws.column_dimensions['D'].width = 30
+
+    # ── Future TMCs ──────────────────────────────────────────────────────
+    ws = wb.create_sheet('Forecast TMCs')
+    heads = ('Int', 'Intersection', 'Period', 'Movement', 'Existing (vph)', 'Future (vph)',
+             'Future unrounded', 'Δ (vph)', 'Change %', 'Note')
+    for col, h in enumerate(heads, start=1):
+        _style_header(ws.cell(row=1, column=col, value=h))
+    r_ = 1
+    for p in ('AM', 'PM'):
+        p2 = (results.get(p) or {}).get('pass2') or {}
+        fut, unr = p2.get('balanced') or {}, p2.get('balanced_unrounded') or {}
+        for n in sorted(fut, key=lambda x: int(x)):
+            it = names.get(int(n)) or {}
+            ex_all = (it.get('balanced') or {}).get(p) or {}
+            for mv in FC_MOVEMENTS:
+                ex_raw = float(ex_all.get(mv) or 0)
+                fu = fut[n].get(mv) or 0
+                fu_raw = float((unr.get(n) or {}).get(mv, fu) or 0)
+                ex = _js_round(ex_raw)
+                if ex <= 0 and fu <= 0:
+                    continue
+                d = _js_round(fu_raw - ex_raw)
+                pct = (fu_raw - ex_raw) / ex_raw if ex_raw > 0 else None
+                r_ += 1
+                vals = (int(n), it.get('name') or MISSING, p, mv, ex, fu, round(fu_raw, 1), d, pct,
+                        'decline' if d < 0 else '')
+                for col, v in enumerate(vals, start=1):
+                    c = ws.cell(row=r_, column=col, value=v)
+                    _style_data(c, fmt={7: '0.0', 8: '+#,##0;-#,##0;0', 9: '+0.0%;-0.0%;0.0%'}.get(col))
+                    if d < 0 and col in (8, 9, 10):
+                        c.font = NEG_FONT
+    widths = (6, 34, 8, 10, 14, 13, 16, 10, 10, 10)
+    for col, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+    ws.freeze_panes = 'A2'
+
+    _write_corridor_vmt(wb, project_state)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
