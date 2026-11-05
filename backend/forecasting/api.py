@@ -18,12 +18,15 @@ Validation mirrors app.py's style: dict payloads + HTTPException. Round-tripped
 layers are validated through the NetworkLayer Pydantic model.
 """
 
+import io
 import math
+import re
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
+from excel_export import build_forecast_workbook
 from forecasting.contract import NetworkLayer, Period
 from forecasting.adapters.mtc import available_years as mtc_years
 from forecasting.ingest import ADAPTERS, ingest_networks, sandag_years
@@ -170,6 +173,22 @@ def ingest_match(payload: dict):
         "layers": {role: lyr.model_dump(mode="json") for role, lyr in layers.items()},
         "matches": matches,
     }
+
+
+@router.post("/export-excel")
+def export_forecast_excel(payload: dict):
+    """Forecast workbook (summary + future TMCs + VMT) from the project snapshot —
+    same shape as app.py's /export-excel; numbers read verbatim from the run F4 shows."""
+    if not ((payload.get("forecasting") or {}).get("results")):
+        _bad("there are no forecast results to export — run the forecast first (Forecasting step 3).")
+    data = build_forecast_workbook(payload)
+    name = ((payload.get("project") or {}).get("name") or "").strip()
+    safe = re.sub(r"[^a-zA-Z0-9_-]+", "_", name).strip("_") or "project"
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{safe}_forecast.xlsx"'},
+    )
 
 
 @router.get("/model-years")

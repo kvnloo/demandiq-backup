@@ -213,3 +213,34 @@ def test_item12_nchrp765_boundaries_match_printed_table():
     assert _nchrp765_pick(100, 100, 80, K, 80, 80)[1] == "ratio"
     # between the limits → RAf = average(MRATIO, DIFF)
     assert _nchrp765_pick(150, 100, 150, K, 225, 200)[1] == "average of ratio and difference"
+
+
+# ── Item 8: forecast workbook — numbers equal what F4 shows ──────────────────
+def test_item8_forecast_export_matches_run():
+    import io
+    from openpyxl import load_workbook
+    run = client.post("/forecast/run", json=_no_model(growth_rate_pct=-1)).json()
+    snap = {"project": {"name": "QC corridor"},
+            "intersections": [{"num": n, "name": f"Int {n} St", "balanced": {"AM": dict(TMC)}} for n in NUMS],
+            "forecasting": {"results": run, "run": {
+                "baseYear": 2025, "horizonYear": 2045, "region": "SANDAG",
+                "settings": {"refineMethod": "rate", "turnMethod": "furness", "growthRate": -1}}}}
+    r = client.post("/forecast/export-excel", json=snap)
+    assert r.status_code == 200
+    assert "QC_corridor_forecast.xlsx" in r.headers["content-disposition"]
+    wb = load_workbook(io.BytesIO(r.content))
+    assert wb.sheetnames[:2] == ["Forecast Summary", "Forecast TMCs"]
+    summary = {row[0]: row[1] for row in wb["Forecast Summary"].iter_rows(values_only=True) if row[0]}
+    assert summary["Forecast (horizon) year"] == 2045
+    assert summary["How each road grows"] == "Growth rate entered (no model)"
+    assert any("REFINE-DECLINE" == row[2] for row in wb["Forecast Summary"].iter_rows(values_only=True))
+    rows = list(wb["Forecast TMCs"].iter_rows(min_row=2, values_only=True))
+    assert len(rows) == 3 * 12
+    fut = run["AM"]["pass2"]["balanced"]
+    for n, _, p, mv, ex, fu, _, d, _, note in rows:
+        assert p == "AM" and ex == TMC[mv] and fu == fut[str(n)][mv]
+        assert d < 0 and note == "decline"           # −1 %/yr × 20: every movement declines
+
+
+def test_item8_forecast_export_without_results_is_400():
+    assert client.post("/forecast/export-excel", json={"project": {"name": "x"}}).status_code == 400
