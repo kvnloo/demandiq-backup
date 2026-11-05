@@ -248,7 +248,12 @@ def _dg_stop_sign(ax, ap, cx, cy):
 
 
 # ── Cell + approach drawing ────────────────────────────────────────────────────
-def _dg_draw_approach(ax, ap, cx, cy, u_vols, b_vols, p, label_fn, overrides=None):
+# leg each turn leaves by, named like the approaches (EB left heads north → north leg 'SB')
+_DG_EXIT_LEG = {'NBT': 'SB', 'NBL': 'EB', 'NBR': 'WB', 'SBT': 'NB', 'SBL': 'WB', 'SBR': 'EB',
+                'EBT': 'WB', 'EBL': 'SB', 'EBR': 'NB', 'WBT': 'EB', 'WBL': 'NB', 'WBR': 'SB'}
+
+
+def _dg_draw_approach(ax, ap, cx, cy, u_vols, b_vols, p, label_fn, overrides=None, active=None):
     """Draw 3 arrows + volume labels for one approach using preset p.
 
     label_fn: callable(u_int, b_int) → (text_str, color_hex). Determines what
@@ -274,11 +279,14 @@ def _dg_draw_approach(ax, ap, cx, cy, u_vols, b_vols, p, label_fn, overrides=Non
         points = _dg_get_arrow(ap, mv, ax_, ay_, s)
         if not points:
             continue
-        _dg_arrow(ax, points, lw=lw, hw=hw, hl=hl)
         key = f"{ap}{mv}"
         u = int(u_vols.get(key, 0) or 0)
         b = int(b_vols.get(key, 0) or 0)
         is_overridden = key in overrides
+        # no 0 (0) U-turn arrows, and no empty arrows into a leg that doesn't exist
+        if not (u or b or is_overridden) and (mv == 'U' or (active and _DG_EXIT_LEG.get(key, ap) not in active)):
+            continue
+        _dg_arrow(ax, points, lw=lw, hw=hw, hl=hl)
         if is_overridden:
             b = int(overrides[key] or 0)
         lbl, color = label_fn(u, b)
@@ -424,7 +432,7 @@ def _dg_draw_cell(ax, geo, u_vols, b_vols, p, label_fn, overrides=None, period_l
         if 'WB' in active: ax.text(cx + arm * 0.70, cy - 0.044, ew_text, fontsize=ew_fs, **nk_common)
 
     for ap in active:
-        _dg_draw_approach(ax, ap, cx, cy, u_vols, b_vols, p, label_fn, overrides)
+        _dg_draw_approach(ax, ap, cx, cy, u_vols, b_vols, p, label_fn, overrides, active)
 
     # Number badge top-left + name banner top-center
     ax.add_patch(MplCircle((0.082, 0.922), 0.048, facecolor=DG_WHITE,

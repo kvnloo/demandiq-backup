@@ -90,7 +90,7 @@ export default function S8_Export() {
       const res = await fetch('/api/export-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(snap),
+        body: JSON.stringify({ ...snap, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       })
       if (!res.ok) {
         let detail = `HTTP ${res.status}`

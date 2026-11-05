@@ -87,7 +87,8 @@ export default function S5_BalancingSettings() {
   const peakMode   = balancing.peakMode ?? 'Corridor'
   const am         = balancing.amWindow ?? { start: '07:00', end: '09:00' }
   const pm         = balancing.pmWindow ?? { start: '16:00', end: '18:00' }
-  const convStored = balancing.convergenceThreshold ?? 0.01
+  // tolerance is in vehicles; projects saved when it was a % fraction (0.01) fall back to 0.5 veh
+  const convStored = balancing.convergenceThreshold >= 0.1 ? balancing.convergenceThreshold : 0.5
   const maxIter    = balancing.maxIterations ?? 500
 
   // ── Validation ──────────────────────────────────────────────────────
@@ -95,8 +96,8 @@ export default function S5_BalancingSettings() {
     amEnd: !timeLT(am.start, am.end) ? 'AM end must be after AM start' : null,
     pmEnd: !timeLT(pm.start, pm.end) ? 'PM end must be after PM start' : null,
     pmStart: !timeLE(am.end, pm.start) ? 'PM window cannot overlap AM' : null,
-    conv: !(convStored > 0 && convStored * 100 >= 0.1 && convStored * 100 <= 5)
-      ? 'Must be between 0.1% and 5.0%'
+    conv: !(convStored >= 0.1 && convStored <= 50)
+      ? 'Must be between 0.1 and 50 vehicles'
       : null,
     iter: !(maxIter >= 10 && maxIter <= 1000)
       ? 'Must be between 10 and 1000'
@@ -247,22 +248,22 @@ export default function S5_BalancingSettings() {
             <h3 className="di-s5-section__title">When to stop balancing</h3>
             <div className="di-s5-stack__sub" style={{ marginBottom: 8 }}>
               Each intersection is adjusted in repeated passes until its volumes stop changing
-              (convergence threshold) or the pass limit is reached.
+              (stop when every movement changes by less than this many vehicles) or the pass limit is reached.
             </div>
 
             <div className="di-s5-row">
               <div className="di-s5-row__label">Convergence threshold</div>
               <div>
                 <NumWithSuffix
-                  value={Math.round(convStored * 1000) / 10}
-                  suffix="%"
+                  value={convStored}
+                  suffix="veh"
                   step={0.1}
                   min={0.1}
-                  max={5}
+                  max={50}
                   err={!!errors.conv}
                   disabled={!enabled}
                   onChange={(v) =>
-                    setBalancing({ convergenceThreshold: v == null ? null : v / 100 })
+                    setBalancing({ convergenceThreshold: v })
                   }
                 />
                 {errors.conv && <div className="di-s5-err">{errors.conv}</div>}
@@ -376,7 +377,7 @@ export default function S5_BalancingSettings() {
               />
               <SumRow k="AM" v={`${am.start} – ${am.end}`} />
               <SumRow k="PM" v={`${pm.start} – ${pm.end}`} />
-              <SumRow k="Convergence" v={`${(convStored * 100).toFixed(1)}%`} />
+              <SumRow k="Convergence" v={`${convStored.toFixed(1)} veh`} />
               <SumRow k="Max iterations" v={String(maxIter)} />
               {pairs.length > 0 && (
                 <div className="di-s5-sum__row">
