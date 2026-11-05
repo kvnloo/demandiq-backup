@@ -4,20 +4,23 @@ import NeedsStep from '../components/NeedsStep'
 import { Plus, Trash2 } from 'lucide-react'
 
 import { getForecasting, setForecasting, isExistingAnalysisDone } from '../store/projectStore'
+import { isMatchStale, isRunStale } from '../lib/forecastRun'
 import '../styles/forms.css'
 import '../styles/forecasting.css'
 
-// v1 SANDAG asset lives server-side under data/sandag/. The engineer gives just
-// the FILE NAME; the backend resolves it under its data dir (so a path can't
-// escape, and it's CWD-independent). The year is engineer-tagged here, not
-// parsed from the filename, per the locked scenario-year call.
-const DEFAULT_SANDAG_PATH = 'hwyLoad.shp'
+// SANDAG model runs live server-side as data/sandag/hwyLoad_<year>.shp. The
+// engineer picks a model YEAR from the ones the server has; the server picks the
+// file (a client never sends a path) — same as MTC.
+const SANDAG_NETWORKS = [
+  { role: 'base', scenarioYear: '' },
+  { role: 'horizon', scenarioYear: '' },
+]
 const ROLES = [
   { id: 'base', label: 'Base' },
   { id: 'horizon', label: 'Horizon' },
 ]
 
-// Model regions. MTC's two runs are fixed server-side; SANDAG files are named here.
+// Model regions. MTC's two runs are fixed server-side; SANDAG's year is picked here.
 const REGIONS = [
   { id: 'SANDAG', label: 'San Diego (SANDAG)' },
   { id: 'MTC', label: 'Bay Area (MTC)' },
@@ -32,7 +35,7 @@ const DEFAULTS = () => ({
   region: 'SANDAG',
   baseYear: '',
   horizonYear: 2030,
-  networks: [{ role: 'base', scenarioYear: '', path: DEFAULT_SANDAG_PATH }],
+  networks: SANDAG_NETWORKS,
 })
 
 export default function F1_HorizonNetwork() {
@@ -40,6 +43,14 @@ export default function F1_HorizonNetwork() {
   const gateOpen = isExistingAnalysisDone()
 
   const [form, setForm] = useState(() => ({ ...DEFAULTS(), ...(getForecasting() ?? {}) }))
+  const [sandagYears, setSandagYears] = useState(null)   // null = loading, [] = none / failed
+
+  useEffect(() => {
+    fetch('/api/forecast/model-years')
+      .then((r) => (r.ok ? r.json() : { SANDAG: [] }))
+      .then((d) => setSandagYears(d.SANDAG ?? []))
+      .catch(() => setSandagYears([]))
+  }, [])
 
   // Self-guard: forecasting grows the existing balanced TMCs, so it's unreachable
 
@@ -80,7 +91,6 @@ export default function F1_HorizonNetwork() {
         {
           role: f.networks.some((n) => n.role === 'base') ? 'horizon' : 'base',
           scenarioYear: '',
-          path: DEFAULT_SANDAG_PATH,
         },
       ],
     }))
@@ -95,10 +105,14 @@ export default function F1_HorizonNetwork() {
       region: id,
       networks: id === 'MTC'
         ? MTC_NETWORKS
-        : [{ role: 'base', scenarioYear: '', path: DEFAULT_SANDAG_PATH }],
+        : SANDAG_NETWORKS,
     }))
   const countYear = Number(form.baseYear)
   const horizonYear = Number(form.horizonYear)
+  // Changed since the last pull / run? Say so — results are never relabelled.
+  const fc = getForecasting() ?? {}
+  const pullStale = isMatchStale({ ...fc, ...form })
+  const runStale = !pullStale && isRunStale({ ...fc, ...form })
   const horizonOutOfRange = countYear > 0 && horizonYear > 0 &&
     (horizonYear < countYear || horizonYear > countYear + MAX_HORIZON_YEARS)
 
@@ -175,9 +189,15 @@ export default function F1_HorizonNetwork() {
         {!isMtc && <div className="di-field">
           <label className="di-label">SANDAG model networks</label>
           <p className="di-help" style={{ marginTop: 0 }}>
-            Tag each loaded-network file with its role and model year. The year is
-            yours to set — it isn&apos;t read from the filename.
+            Pick the model run for the base and the horizon. The base run should be
+            close to your count year; DemandIQ interpolates both to your count and
+            forecast years.
           </p>
+          {sandagYears?.length === 0 && (
+            <div className="di-fc-banner di-fc-banner--warn">
+              No SANDAG model runs are available on this server.
+            </div>
+          )}
 
           {form.networks.map((n, i) => (
             <div key={i} className="di-fc-network">
@@ -194,26 +214,19 @@ export default function F1_HorizonNetwork() {
                   </button>
                 ))}
               </div>
-              <input
+              <select
                 className="di-input"
-                type="number"
-                inputMode="numeric"
-                placeholder="year"
                 value={n.scenarioYear}
-                onChange={(e) => updateNetwork(i, { scenarioYear: e.target.value })}
-                style={{ maxWidth: 110 }}
+                onChange={(e) => updateNetwork(i, { scenarioYear: e.target.value === '' ? '' : Number(e.target.value) })}
+                style={{ maxWidth: 200 }}
                 aria-label={`Network ${i + 1} model year`}
-              />
-              <input
-                className="di-input"
-                type="text"
-                spellCheck={false}
-                autoComplete="off"
-                placeholder={DEFAULT_SANDAG_PATH}
-                value={n.path}
-                onChange={(e) => updateNetwork(i, { path: e.target.value })}
-                aria-label={`Network ${i + 1} shapefile path`}
-              />
+              >
+                <option value="">{sandagYears == null ? 'Loading years…' : 'Pick a model year'}</option>
+                {(sandagYears ?? []).map((y) => <option key={y} value={y}>{y} model run</option>)}
+                {n.scenarioYear !== '' && sandagYears && !sandagYears.includes(Number(n.scenarioYear)) && (
+                  <option value={n.scenarioYear}>{n.scenarioYear} (not on this server)</option>
+                )}
+              </select>
               {form.networks.length > 1 && (
                 <button
                   type="button"
@@ -238,6 +251,18 @@ export default function F1_HorizonNetwork() {
             Method 1 grows the count by the model&apos;s base→horizon change, so it
             needs both years. You can save with the base network only for now and
             add the horizon file when it&apos;s available.
+          </div>
+        )}
+
+        {pullStale && (
+          <div className="di-fc-banner di-fc-banner--warn">
+            The model network or region changed since the last pull — re-pull it in step 2.
+            The earlier matches and results no longer apply.
+          </div>
+        )}
+        {runStale && (
+          <div className="di-fc-banner di-fc-banner--warn">
+            The years changed since the last forecast run — run the forecast again in step 3.
           </div>
         )}
 
