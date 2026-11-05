@@ -320,3 +320,6 @@
 .di-s7__kpis {
   margin: 0 16px 14px;
 }
+
+/* What the diagram numbers mean for the current view (S7 toolbar). */
+.di-s7__legend { margin: 0 0 10px; font-size: 12px; color: var(--text-secondary); }

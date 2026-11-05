@@ -9,7 +9,10 @@ import {
   Loader2,
 } from 'lucide-react'
 
-import { subscribe, getSnapshot } from '../store/projectStore'
+import { subscribe, getSnapshot, isResultsStale, exportProjectFile } from '../store/projectStore'
+import RunStatusBanner from '../components/RunStatusBanner'
+import NewProjectDialog from '../components/NewProjectDialog'
+import { friendlyError } from '../lib/apiError'
 import { buildGridCell, intersectionGeo, stripVols } from '../lib/diagramPayload'
 import { convergenceLabel } from '../lib/convergenceLabel'
 
@@ -20,8 +23,6 @@ import '../styles/forecasting.css' // .di-btn-amber for the Continue to Forecast
 
 const GRID_VIEWS = ['combined', 'balanced', 'unbalanced', 'delta']
 const GRID_PERIODS = ['Both', 'AM', 'PM']
-
-const STORAGE_KEY = 'demandiq:project'
 
 function hasAnyBalanced(intersections) {
   for (const it of intersections) {
@@ -57,6 +58,8 @@ export default function S8_Export() {
   const lastRun = snap.analysis?.lastRun ?? null
 
   const needsRun = intersections.length === 0 || !hasAnyBalanced(intersections)
+  // Results built from counts that have since changed must not be exported.
+  const stale = isResultsStale(snap)
 
 
   // Local UI state
@@ -97,19 +100,13 @@ export default function S8_Export() {
       triggerBlobDownload(blob, `${filename}.xlsx`)
       setExcelStatus('idle')
     } catch (err) {
-      setExcelError(
-        `${err.message}. Make sure the backend is running (cd backend && python3.12 app.py).`
-      )
+      setExcelError(friendlyError(err))
       setExcelStatus('error')
     }
   }
 
   // ── JSON download ───────────────────────────────────────────────────
-  const downloadJson = () => {
-    const json = JSON.stringify(snap, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    triggerBlobDownload(blob, `${filename}.demandiq.json`)
-  }
+  const downloadJson = () => exportProjectFile(filename)
 
   // ── Diagram batch (composite grid PNG) ──────────────────────────────
   const downloadDiagramGrid = async () => {
@@ -141,9 +138,7 @@ export default function S8_Export() {
       triggerBlobDownload(blob, `${filename}_diagrams_${gridPeriod}_${gridView}.png`)
       setGridStatus('idle')
     } catch (err) {
-      setGridError(
-        `${err.message}. Make sure the backend is running (cd backend && python3.12 app.py).`
-      )
+      setGridError(friendlyError(err))
       setGridStatus('error')
     }
   }
@@ -200,9 +195,7 @@ export default function S8_Export() {
       })
       setCorrStatus('ready')
     } catch (err) {
-      setCorrError(
-        `${err.message}. Make sure the backend is running (cd backend && python3.12 app.py).`
-      )
+      setCorrError(friendlyError(err))
       setCorrStatus('error')
     }
   }
@@ -222,13 +215,6 @@ export default function S8_Export() {
     triggerBlobDownload(dataUrlToBlob(corrImages.pm), `${filename}_line_diagram_pm.png`)
   }
 
-  // ── New project ─────────────────────────────────────────────────────
-  const confirmNewProject = () => {
-    localStorage.removeItem(STORAGE_KEY)
-    // Hard reload to clear every component's local state cleanly.
-    window.location.href = '/'
-  }
-
   // ── Summary derivation ──────────────────────────────────────────────
   const intCount = intersections.length
   const corridor = balancing.corridorDir ?? snap.analysis?.corridorDir ?? '—'
@@ -246,9 +232,11 @@ export default function S8_Export() {
       <div className="di-s8__body">
         <div className="di-s8__inner">
 
+          <RunStatusBanner snap={snap} />
+
           {/* ── Project summary card ────────────────────────────────── */}
           <div className="di-s8-summary">
-            <div className="di-s8-summary__eyebrow">Ready to Export</div>
+            <div className="di-s8-summary__eyebrow">{stale ? 'Out of date — run balancing again to export' : 'Ready to Export'}</div>
             <h1 className="di-s8-summary__title">{project.name || 'Untitled Project'}</h1>
             <div className="di-s8-summary__grid">
               <SumRow k="Client"        v={project.client || '—'} />
@@ -301,7 +289,7 @@ export default function S8_Export() {
               <button
                 type="button"
                 className="di-btn-primary di-s8-card__btn"
-                disabled={excelStatus === 'loading'}
+                disabled={stale || excelStatus === 'loading'}
                 onClick={downloadExcel}
               >
                 {excelStatus === 'loading' ? (
@@ -327,8 +315,8 @@ export default function S8_Export() {
                 </div>
               </div>
               <p className="di-s8-card__desc">
-                Complete project state — re-import later to continue work.
-                Includes all intersections, approaches, volumes, balanced results, and QC flags.
+                Complete project state — open it later from Project Setup (Open project file)
+                to continue work. Includes all intersections, approaches, volumes, balanced results, and QC flags.
               </p>
               <button
                 type="button"
@@ -356,7 +344,7 @@ export default function S8_Export() {
                 <button
                   type="button"
                   className="di-btn-primary di-s8-card__btn"
-                  disabled={corrStatus === 'loading'}
+                  disabled={stale || corrStatus === 'loading'}
                   onClick={generateCorridorDiagrams}
                 >
                   {corrStatus === 'loading' ? (
@@ -373,6 +361,7 @@ export default function S8_Export() {
                 <button
                   type="button"
                   className="di-btn-primary di-s8-card__btn"
+                  disabled={stale}
                   onClick={downloadCorridorDiagrams}
                 >
                   Download both .png
@@ -420,7 +409,7 @@ export default function S8_Export() {
               <button
                 type="button"
                 className="di-btn-primary di-s8-card__btn"
-                disabled={gridStatus === 'loading'}
+                disabled={stale || gridStatus === 'loading'}
                 onClick={downloadDiagramGrid}
               >
                 {gridStatus === 'loading' ? (
@@ -480,6 +469,7 @@ export default function S8_Export() {
           <button
             type="button"
             className="di-btn-amber"
+            disabled={stale}
             onClick={() => navigate('/forecast/setup')}
             title="Forecast future conditions from these balanced volumes"
           >
@@ -488,39 +478,7 @@ export default function S8_Export() {
         </div>
       </footer>
 
-      {/* ── Confirm modal ─────────────────────────────────────────── */}
-      {confirmOpen && (
-        <div className="di-modal-backdrop">
-          <div className="di-modal" role="dialog" aria-modal="true">
-            <div className="di-modal__header">
-              <h2 className="di-modal__title">Start a new project?</h2>
-            </div>
-            <div className="di-modal__body">
-              <p className="di-s8-confirm-msg">
-                This clears the current project from your browser. Make sure
-                you've exported the Excel workbook or saved the .demandiq.json
-                file first — there's no undo.
-              </p>
-            </div>
-            <div className="di-modal__footer">
-              <button
-                type="button"
-                className="di-btn-secondary"
-                onClick={() => setConfirmOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="di-btn-primary"
-                onClick={confirmNewProject}
-              >
-                Yes, start new
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirmOpen && <NewProjectDialog onCancel={() => setConfirmOpen(false)} />}
     </div>
   )
 }
