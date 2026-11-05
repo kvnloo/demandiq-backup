@@ -25,7 +25,7 @@ import math
 
 import matplotlib
 matplotlib.use('Agg')                       # headless before pyplot import
-import matplotlib.pyplot as plt              # noqa: E402
+from matplotlib.figure import Figure         # noqa: E402  (OO API: thread-safe, unlike pyplot)
 import numpy as np                           # noqa: E402
 from matplotlib.patches import Polygon as MplPolygon, Circle as MplCircle  # noqa: E402
 
@@ -513,12 +513,12 @@ def render_single_diagram(intersection_geo, u_vols, b_vols, view_mode='combined'
         cap_h = 0.26 + 0.17 * n_lines        # inches
         fig_h = FIG_INCHES + cap_h
         bottom_frac = cap_h / fig_h
-        fig = plt.figure(figsize=(FIG_INCHES, fig_h), facecolor=DG_WHITE)
+        fig = Figure(figsize=(FIG_INCHES, fig_h), facecolor=DG_WHITE)
         ax = fig.add_subplot(1, 1, 1)
         ax.set_position([0, bottom_frac, 1, FIG_INCHES / fig_h])
     else:
         fig_h = FIG_INCHES
-        fig = plt.figure(figsize=(FIG_INCHES, fig_h), facecolor=DG_WHITE)
+        fig = Figure(figsize=(FIG_INCHES, fig_h), facecolor=DG_WHITE)
         ax = fig.add_subplot(1, 1, 1)
         fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
 
@@ -530,7 +530,6 @@ def render_single_diagram(intersection_geo, u_vols, b_vols, view_mode='combined'
 
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=DPI, facecolor=DG_WHITE)
-    plt.close(fig)
     buf.seek(0)
     return buf.read()
 
@@ -566,7 +565,7 @@ def render_diagram_grid(cells, view_mode='combined', cols=GRID_DEFAULT_COLS, tit
     title_h = 0.6 if title else 0.0
     fig_w = cols * cell_in
     fig_h = rows * cell_in + title_h
-    fig = plt.figure(figsize=(fig_w, fig_h), facecolor=DG_WHITE)
+    fig = Figure(figsize=(fig_w, fig_h), facecolor=DG_WHITE)
 
     cell_frac_w = 1.0 / cols
     grid_frac_h = (rows * cell_in) / fig_h          # fraction below the title band
@@ -590,7 +589,6 @@ def render_diagram_grid(cells, view_mode='combined', cols=GRID_DEFAULT_COLS, tit
 
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=DPI, facecolor=DG_WHITE)
-    plt.close(fig)
     buf.seek(0)
     return buf.read()
 
@@ -606,45 +604,62 @@ def _primary_direction_pair(corridor_dir):
     return (a.strip(), b.strip())
 
 
-def _segment_label_for_pair(from_num, to_num, resolved_links, corridor_dir):
-    """Find the resolved-links entry for the segment between two adjacent
-    intersections in the corridor's primary direction.
+# A corridor is a line, so draw it as one row (every segment gets an in-figure
+# label) up to this many intersections; longer corridors wrap at `cols`.
+CORRIDOR_ONE_ROW_MAX = 8
 
-    Tries the corridor's forward direction first (e.g. EB), then the reverse
-    (WB) so a label is rendered regardless of which way `from_num` → `to_num`
-    points. Returns (text, volume) or (None, None) if no match.
+
+def corridor_cols(n, cols):
+    """Columns the corridor figure actually uses for n cells."""
+    return n if n <= CORRIDOR_ONE_ROW_MAX else max(1, min(int(cols), n))
+
+
+def _balanced_by_num(cells):
+    """{int_num: final balanced vols} — engineer overrides win, as drawn."""
+    return {int(c['geo']['num']): {**(c.get('b_vols') or {}), **(c.get('overrides') or {})}
+            for c in cells}
+
+
+def _segment_label_for_pair(from_num, to_num, resolved_links, corridor_dir, b_by_num=None):
+    """Label for the corridor segment between two adjacent intersections, one
+    line per direction found in resolved_links (e.g. EB 1→2 and WB 2→1).
+
+    The number is the BALANCED flow on the link: the upstream intersection's
+    outflow onto it (= downstream inflow when the link conserves), computed
+    from b_by_num the same way compute_link_conservation does. Falls back to
+    the resolved-link target only when no balanced volumes are given.
+    Returns (text, volume_of_first_line) or (None, None) if no link matches.
     """
+    from balancer import DIRECTION_SPEC
     if not resolved_links:
         return (None, None)
-    fwd, rev = _primary_direction_pair(corridor_dir)
 
-    def _find(f, t, direction):
+    def _find(direction):
         for r in resolved_links:
-            if (int(r.get('fromNum')) == f
-                    and int(r.get('toNum')) == t
-                    and r.get('direction') == direction):
+            if (r.get('direction') == direction
+                    and {int(r.get('fromNum')), int(r.get('toNum'))} == {from_num, to_num}):
                 return r
         return None
 
-    chosen = None
-    if fwd:
-        chosen = _find(from_num, to_num, fwd)
-    if chosen is None and rev:
-        chosen = _find(from_num, to_num, rev)
-    # Try the swapped pair too — corridor cell ordering doesn't always match
-    # the resolved-link key ordering when the link goes the "other" way.
-    if chosen is None and fwd:
-        chosen = _find(to_num, from_num, fwd)
-    if chosen is None and rev:
-        chosen = _find(to_num, from_num, rev)
-
-    if chosen is None:
+    lines, first = [], None
+    for direction in _primary_direction_pair(corridor_dir):
+        r = _find(direction) if direction else None
+        if r is None:
+            continue
+        u, d = int(r['fromNum']), int(r['toNum'])
+        up = (b_by_num or {}).get(u)
+        if up:
+            spec = DIRECTION_SPEC[direction]
+            vol = sum(float(up.get(k) or 0) for k in spec['outflow']) + float(up.get(spec['outflow_u']) or 0)
+        elif r.get('volume') is not None:
+            vol = float(r['volume'])
+        else:
+            continue
+        lines.append(f"{direction} {u}→{d}: {int(round(vol))} veh")
+        first = vol if first is None else first
+    if not lines:
         return (None, None)
-    vol = chosen.get('volume')
-    if vol is None:
-        return (None, None)
-    text = f"{int(chosen['fromNum'])}→{int(chosen['toNum'])}: {int(round(float(vol)))} veh"
-    return (text, float(vol))
+    return ("\n".join(lines), first)
 
 
 def collect_wrap_segment_labels(cells, cols, resolved_links, corridor_dir):
@@ -655,24 +670,35 @@ def collect_wrap_segment_labels(cells, cols, resolved_links, corridor_dir):
     corridor flow story would be partial. The corridor diagram surfaces this
     list as a footnote band below the figure.
 
-    Returns: list[str] of "<from>→<to>: <volume> veh" labels, in cell order.
+    Returns: list[str] of segment labels, in cell order.
     Empty when cols == n (single row) or when resolved_links is empty.
 
     Pure function: no matplotlib state, no I/O — safe to unit-test.
     """
     out = []
     n = len(cells)
+    b_by_num = _balanced_by_num(cells)
     for i in range(n - 1):
         if i // cols == (i + 1) // cols:
             continue
         a_geo = cells[i]['geo']
         b_geo = cells[i + 1]['geo']
         text, _vol = _segment_label_for_pair(
-            int(a_geo['num']), int(b_geo['num']), resolved_links, corridor_dir,
+            int(a_geo['num']), int(b_geo['num']), resolved_links, corridor_dir, b_by_num,
         )
         if text is not None:
-            out.append(text)
+            out.append(text.replace("\n", " / "))
     return out
+
+
+def count_segment_labels(cells, resolved_links, corridor_dir):
+    """Adjacent pairs that get a segment label (in-figure or footnote)."""
+    b_by_num = _balanced_by_num(cells)
+    return sum(
+        _segment_label_for_pair(int(cells[i]['geo']['num']), int(cells[i + 1]['geo']['num']),
+                                resolved_links, corridor_dir, b_by_num)[0] is not None
+        for i in range(len(cells) - 1)
+    )
 
 
 def render_corridor_diagram(cells, resolved_links, corridor_dir, period_label,
@@ -707,10 +733,11 @@ def render_corridor_diagram(cells, resolved_links, corridor_dir, period_label,
         raise ValueError("render_corridor_diagram: no cells to render")
 
     label_fn = _make_label_fn(view_mode)
-    cols = max(1, min(int(cols), n))
+    cols = corridor_cols(n, cols)
     rows = math.ceil(n / cols)
     cell_in = FIG_INCHES
     p = _single_cell_preset(cell_in)
+    b_by_num = _balanced_by_num(cells)
 
     wrap_segments = collect_wrap_segment_labels(cells, cols, resolved_links, corridor_dir)
 
@@ -719,7 +746,7 @@ def render_corridor_diagram(cells, resolved_links, corridor_dir, period_label,
     footnote_h = 0.35 if wrap_segments else 0.0
     fig_w = cols * cell_in
     fig_h = rows * cell_in + title_h + footnote_h
-    fig = plt.figure(figsize=(fig_w, fig_h), facecolor=DG_WHITE)
+    fig = Figure(figsize=(fig_w, fig_h), facecolor=DG_WHITE)
 
     cell_frac_w = 1.0 / cols
     grid_frac_h = (rows * cell_in) / fig_h
@@ -755,7 +782,7 @@ def render_corridor_diagram(cells, resolved_links, corridor_dir, period_label,
         a_geo = cells[i]['geo']
         b_geo = cells[i + 1]['geo']
         text, _vol = _segment_label_for_pair(
-            int(a_geo['num']), int(b_geo['num']), resolved_links, corridor_dir,
+            int(a_geo['num']), int(b_geo['num']), resolved_links, corridor_dir, b_by_num,
         )
         if text is None:
             continue
@@ -791,6 +818,5 @@ def render_corridor_diagram(cells, resolved_links, corridor_dir, period_label,
 
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=DPI, facecolor=DG_WHITE)
-    plt.close(fig)
     buf.seek(0)
     return buf.read()
