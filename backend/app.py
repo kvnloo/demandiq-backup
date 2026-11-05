@@ -15,6 +15,9 @@ APP_PASSWORD in the Environment tab.
 import os
 import io
 import re
+import json
+import math
+import logging
 import base64
 import secrets
 import tempfile
@@ -37,16 +40,18 @@ from openpyxl.styles import Font, Alignment, PatternFill
 
 from count_agent import extract, MOVEMENTS, MODEL as COUNT_MODEL
 import capture
-from balancer import balance_nchrp, fractional_volume_flags, source_outlier_flags
+from balancer import balance_nchrp, fractional_volume_flags, source_outlier_flags, _orient
 from line_diagram import (
     render_single_diagram,
     render_diagram_grid,
     render_corridor_diagram,
+    corridor_cols,
+    count_segment_labels,
     VIEW_MODES,
     FIG_INCHES,
     DPI,
 )
-from excel_export import build_workbook
+from excel_export import build_workbook, strip_illegal_chars, workbook_bytes
 import jev
 from forecasting.api import router as forecasting_router
 
@@ -54,7 +59,9 @@ from forecasting.api import router as forecasting_router
 API_KEY = os.getenv("ANTHROPIC_API_KEY")
 if not API_KEY:
     raise RuntimeError(
-        "ANTHROPIC_API_KEY not set. Add it to ~/.bash_profile and reopen terminal."
+        "ANTHROPIC_API_KEY is not set. On Render: open the service's Environment "
+        "tab, add ANTHROPIC_API_KEY, and redeploy. Locally: export it in your shell "
+        "(e.g. ~/.bash_profile) and restart."
     )
 
 # If APP_PASSWORD is set, all routes require basic auth.
@@ -63,7 +70,126 @@ APP_PASSWORD = os.getenv("APP_PASSWORD")
 
 ALLOWED_EXT = {".xlsx", ".xls", ".pdf", ".csv"}
 
-app = FastAPI(title="DemandIQ", version="0.1.0")
+# Request limits. A count project is a few hundred kB of JSON; uploads are
+# vendor count sheets (a few MB each).
+MAX_BODY_BYTES = 20 * 1024 * 1024
+MAX_EXTRACT_FILES = 50
+MAX_EXTRACT_FILE_BYTES = 25 * 1024 * 1024
+# shortcut: /extract total capped at 200 MB rather than 50 x 25 MB; raise if users batch more.
+MAX_EXTRACT_BODY_BYTES = 200 * 1024 * 1024
+MAX_DIAGRAM_CELLS = 200
+MAX_VOLUME = 20000   # veh/h for one movement; anything larger is a typo
+
+log = logging.getLogger("demandiq")
+
+# With a password set the app is a private deployment: don't publish the API
+# schema (/docs, /redoc, /openapi.json) to unauthenticated visitors.
+_docs = {} if not APP_PASSWORD else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title="DemandIQ", version="0.1.0", **_docs)
+
+
+class BodySizeLimitMiddleware:
+    """Reject request bodies over the cap with 413 before a route reads them."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        path = scope.get("path", "")
+        limit = MAX_EXTRACT_BODY_BYTES if path.rstrip("/").endswith("/extract") else MAX_BODY_BYTES
+        headers = dict(scope.get("headers") or [])
+        try:
+            declared = int(headers.get(b"content-length", b"0"))
+        except ValueError:
+            declared = 0
+        if declared > limit:
+            return await self._reject(send, limit)
+
+        seen = 0
+        started = False
+
+        async def counting_receive():
+            nonlocal seen
+            msg = await receive()
+            if msg["type"] == "http.request":
+                seen += len(msg.get("body", b""))
+                if seen > limit:
+                    raise _BodyTooLarge()
+            return msg
+
+        async def tracking_send(msg):
+            nonlocal started
+            if msg["type"] == "http.response.start":
+                started = True
+            await send(msg)
+
+        try:
+            await self.app(scope, counting_receive, tracking_send)
+        except _BodyTooLarge:
+            if not started:
+                await self._reject(send, limit)
+
+    @staticmethod
+    async def _reject(send, limit):
+        body = json.dumps({"detail": f"The upload is too large (limit {limit // (1024 * 1024)} MB)."}).encode()
+        await send({"type": "http.response.start", "status": 413,
+                    "headers": [(b"content-type", b"application/json"),
+                                (b"content-length", str(len(body)).encode())]})
+        await send({"type": "http.response.body", "body": body})
+
+
+class _BodyTooLarge(Exception):
+    pass
+
+
+# ── Input validation helpers (trust boundary) ─────────────────────────────────
+def _bad(msg):
+    raise HTTPException(status_code=400, detail=msg)
+
+
+def _is_num(v):
+    return not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(v)
+
+
+def _as_int(v):
+    """Whole number from an int, an integral float or a digit string, else None."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float) and v.is_integer():
+        return int(v)
+    if isinstance(v, str) and v.strip().isdigit():
+        return int(v.strip())
+    return None
+
+
+def _show(v):
+    return str(v)[:40]
+
+
+def _check_volume(v, where):
+    """None (not counted) or a finite number 0..MAX_VOLUME, else 400."""
+    if v is None:
+        return None
+    if not _is_num(v) or not 0 <= v <= MAX_VOLUME:
+        _bad(f"{where}: volume must be a number from 0 to {MAX_VOLUME:,} (got {_show(v)}).")
+    return float(v)
+
+
+def _check_vols(d, where):
+    """Movement-volume dict {EBT: 120, ...}. Only movement keys are checked;
+    other keys are ignored, as the balancer and renderers ignore them."""
+    if d is None:
+        return {}
+    if not isinstance(d, dict):
+        _bad(f"{where}: the movement volumes are in the wrong format.")
+    for mv in ALL_MOVEMENTS:
+        if mv in d:
+            _check_volume(d[mv], f"{where} {mv}")
+    return d
 
 
 class ApiPrefixMiddleware:
@@ -93,6 +219,7 @@ class ApiPrefixMiddleware:
 
 
 app.add_middleware(ApiPrefixMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
 
 # CORS — allow the Vite React dev server (localhost:3000) to call the API.
 app.add_middleware(
@@ -141,33 +268,54 @@ async def legacy_index(request: Request):
     return templates.TemplateResponse(request, "index.html")
 
 
+def _extract_error_text(e):
+    """Plain-language reason for a failed extraction (details go to the log)."""
+    if isinstance(e, IOError):
+        return ("Could not read this file. Check that it opens in Excel or a PDF "
+                "viewer and is not password-protected.")
+    if type(e) is ValueError:
+        return str(e)          # count_agent's own messages are written for users
+    return "Could not extract counts from this file right now. Try again in a minute."
+
+
+# Plain def: FastAPI runs it in the threadpool, so a 15 s extraction never
+# blocks the event loop (and /health) for other users.
 @app.post("/extract", dependencies=[Depends(require_auth)])
-async def extract_endpoint(files: list[UploadFile] = File(...)):
+def extract_endpoint(files: list[UploadFile] = File(...)):
     """Process uploaded files. Returns extracted JSON + errors."""
+    if len(files) > MAX_EXTRACT_FILES:
+        _bad(f"Too many files ({len(files)}). Upload at most {MAX_EXTRACT_FILES} at a time.")
     results = []
     errors = []
 
     for f in files:
-        ext = Path(f.filename).suffix.lower()
+        name = f.filename or "(unnamed file)"
+        ext = Path(name).suffix.lower()
         if ext not in ALLOWED_EXT:
-            errors.append({"file": f.filename, "error": f"Unsupported file type: {ext}"})
+            errors.append({"file": name, "error": f"Unsupported file type: {ext or 'none'}. "
+                           "Upload .xlsx, .xls, .pdf or .csv count sheets."})
             continue
 
-        content = await f.read()
+        content = f.file.read(MAX_EXTRACT_FILE_BYTES + 1)
+        if len(content) > MAX_EXTRACT_FILE_BYTES:
+            errors.append({"file": name, "error": "File is larger than "
+                           f"{MAX_EXTRACT_FILE_BYTES // (1024 * 1024)} MB. Split it into smaller files."})
+            continue
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
         try:
             data = extract(tmp_path, API_KEY)
-            data["source_file"] = f.filename
+            data["source_file"] = name
             results.append(data)
             # Record what the model read. Hash only — no file bytes stored.
-            capture.record_extraction(f.filename, content, result=data,
+            capture.record_extraction(name, content, result=data,
                                       model=COUNT_MODEL)
         except Exception as e:
-            errors.append({"file": f.filename, "error": str(e)})
-            capture.record_extraction(f.filename, content, error=e,
+            log.warning("extract failed for %s: %r", name, e)
+            errors.append({"file": name, "error": _extract_error_text(e)})
+            capture.record_extraction(name, content, error=e,
                                       model=COUNT_MODEL)
         finally:
             try:
@@ -175,16 +323,19 @@ async def extract_endpoint(files: list[UploadFile] = File(...)):
             except OSError:
                 pass
 
+    if not results:
+        _bad("None of the files could be read. " +
+             " ".join(f"{e['file']}: {e['error']}" for e in errors))
     return JSONResponse({"results": results, "errors": errors})
 
 
 @app.post("/suggest-matches", dependencies=[Depends(require_auth)])
-async def suggest_matches(payload: dict):
+def suggest_matches(payload: dict):
     """Jev suggestions for extracted intersection names the UI couldn't match.
     {names: [str], candidates: [str]} → {available, suggestions: [{choice, p} | null]}."""
     names, candidates = payload.get("names"), payload.get("candidates")
     if not isinstance(names, list) or not isinstance(candidates, list):
-        raise HTTPException(status_code=400, detail="names and candidates must be lists")
+        _bad("The intersection names to match are in the wrong format.")
     if not jev.available():
         return {"available": False, "suggestions": [None] * len(names)}
     return {"available": True,
@@ -192,11 +343,13 @@ async def suggest_matches(payload: dict):
 
 
 @app.post("/excel", dependencies=[Depends(require_auth)])
-async def excel_endpoint(payload: dict):
+def excel_endpoint(payload: dict):
     """Generate Excel workbook from extraction results."""
-    results = payload.get("results", [])
+    results = strip_illegal_chars(payload.get("results", []))
     if not results:
-        raise HTTPException(status_code=400, detail="No results to export")
+        _bad("No results to export.")
+    if not isinstance(results, list) or not all(isinstance(r, dict) for r in results):
+        _bad("The extraction results are in the wrong format.")
 
     wb = Workbook()
     ws = wb.active
@@ -218,11 +371,18 @@ async def excel_endpoint(payload: dict):
     for r in results:
         source = r.get("source_file", "")
         vendor = r.get("vendor_detected", "")
-        for inter in r.get("intersections", []):
-            am_vol = (inter.get("volumes") or {}).get("AM", {}) or {}
-            pm_vol = (inter.get("volumes") or {}).get("PM", {}) or {}
+        inters = r.get("intersections", [])
+        if not isinstance(inters, list) or not all(isinstance(i, dict) for i in inters):
+            _bad(f"The intersections in {_show(source) or 'a result'} are in the wrong format.")
+        for inter in inters:
+            where = f"Intersection {_show(inter.get('name', ''))}"
+            vols = inter.get("volumes") or {}
             phf = inter.get("phf") or {}
             hv = inter.get("hv_pct") or {}
+            if not all(isinstance(x, dict) for x in (vols, phf, hv)):
+                _bad(f"{where}: volumes, PHF or heavy-vehicle % are in the wrong format.")
+            am_vol = _check_vols(vols.get("AM"), f"{where} AM")
+            pm_vol = _check_vols(vols.get("PM"), f"{where} PM")
 
             row = [
                 source,
@@ -241,6 +401,8 @@ async def excel_endpoint(payload: dict):
                 inter.get("hv_method", ""),
                 inter.get("notes", ""),
             ]
+            if any(v is not None and not isinstance(v, (str, int, float)) for v in row):
+                _bad(f"{where}: a value is in the wrong format (expected text or a number).")
             ws.append(row)
 
     ws.column_dimensions["A"].width = 30
@@ -255,19 +417,15 @@ async def excel_endpoint(payload: dict):
 
     ws.freeze_panes = "D2"
 
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-
     return StreamingResponse(
-        buf,
+        io.BytesIO(workbook_bytes(wb)),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="demandiq_results.xlsx"'},
     )
 
 
 @app.post("/balance-nchrp", dependencies=[Depends(require_auth)])
-async def balance_nchrp_endpoint(payload: dict):
+def balance_nchrp_endpoint(payload: dict):
     """Stage 4: real NCHRP 255/765 turning-movement refinement.
 
     Replaces a previous cascade-prone link-by-link balancer (now removed).
@@ -276,8 +434,9 @@ async def balance_nchrp_endpoint(payload: dict):
          same link into one volume per directed edge (larger or average)
       B) Per-intersection 4×4 Fratar factoring against link-resolved and
          raw-derived row/col targets
-      C) Floor — clamp balanced ≥ raw on every nonzero movement
-      D) Round up to next 5
+      C) Round up to the next 5 (a counted movement never rounds to 0)
+    There is no floor step: under Larger some movements can still end below
+    their raw count, and the response reports every such drop.
 
     Payload:
       {
@@ -288,8 +447,8 @@ async def balance_nchrp_endpoint(payload: dict):
         "unbalanced_volumes": {"AM": {num_str: {mv: val}}, "PM": {...}},
         "links": [{"fromNum", "toNum", "direction", "mode"}],
         "link_resolution_method": "larger" | "average",   # default 'larger'
-        "tolerance": float,                               # default 0.5 (veh)
-        "max_iterations": int                             # per-int, default 100
+        "tolerance": float,       # vehicles, 0 < tol <= 50, default 0.5
+        "max_iterations": int    # per-int, 1..10000, default 500
       }
 
     Response (spec §9 + resolved_links for transparency):
@@ -307,87 +466,139 @@ async def balance_nchrp_endpoint(payload: dict):
     """
     intersections = payload.get("intersections")
     if not isinstance(intersections, list) or not intersections:
-        raise HTTPException(status_code=400, detail="intersections must be a non-empty list")
+        _bad("Add at least one intersection before balancing.")
 
     coords = {}
+    listed = set()
     for it in intersections:
-        if not isinstance(it, dict) or "num" not in it:
-            raise HTTPException(status_code=400, detail="each intersection needs a num field")
-        n = int(it["num"])
-        if "lat" in it and "lng" in it and it["lat"] is not None and it["lng"] is not None:
-            coords[n] = {"lat": float(it["lat"]), "lng": float(it["lng"])}
+        n = _as_int(it.get("num")) if isinstance(it, dict) else None
+        if n is None:
+            _bad("Every intersection needs a whole-number ID (num).")
+        if n in listed:
+            _bad(f"Intersection {n} is listed twice. Give each intersection its own number.")
+        listed.add(n)
+        lat, lng = it.get("lat"), it.get("lng")
+        if lat is not None and lng is not None:
+            if not (_is_num(lat) and _is_num(lng) and -90 <= lat <= 90 and -180 <= lng <= 180):
+                _bad(f"Intersection {n} has an invalid map location "
+                     f"(lat {_show(lat)}, lng {_show(lng)}). Re-place its pin on the map.")
+            coords[n] = {"lat": float(lat), "lng": float(lng)}
 
-    unbalanced = payload.get("unbalanced_volumes", {})
+    unbalanced = payload.get("unbalanced_volumes")
     if not isinstance(unbalanced, dict):
-        raise HTTPException(status_code=400, detail="unbalanced_volumes must be a dict")
+        _bad("No volumes were sent. Enter counts for at least one period (AM or PM).")
 
     links_in = payload.get("links", [])
     if not isinstance(links_in, list):
-        raise HTTPException(status_code=400, detail="links must be a list")
+        _bad("The intersection links are in the wrong format.")
 
     method = payload.get("link_resolution_method", "larger")
     if method not in ("larger", "average"):
-        raise HTTPException(
-            status_code=400,
-            detail="link_resolution_method must be 'larger' or 'average'",
-        )
+        _bad("Link resolution method must be Larger or Average.")
 
-    try:
-        tol = float(payload.get("tolerance", 0.5))
-        max_iter = int(payload.get("max_iterations", 500))
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="tolerance/max_iterations must be numeric")
+    # Tolerance unit: vehicles — the largest leftover mismatch between an
+    # intersection's balanced leg totals and their targets that still counts
+    # as converged.
+    tol = payload.get("tolerance", 0.5)
+    if not _is_num(tol) or not 0 < tol <= 50:
+        _bad("Convergence tolerance must be a number of vehicles above 0 and at most 50.")
+    max_iter = _as_int(payload.get("max_iterations", 500))
+    if max_iter is None or not 1 <= max_iter <= 10000:
+        _bad("Maximum iterations must be a whole number from 1 to 10,000.")
 
     # Stage 4c.3: pass ALL links through (including mode='None') so they
     # appear in the link_conservation output as informational. Filtering by
     # mode happens internally in balance_nchrp (None skipped from leg-total
     # balancing + reconciliation; Land Use balanced but not reconciled;
     # Full balanced + reconciled to canonical).
-    # F1: validate link.direction up front. resolve_link_volumes only accepts
-    # the corridor-axis form ('EB/WB' or 'NB/SB'); anything else (e.g. the
-    # cardinal 'NB') is silently skipped, producing an empty resolved_links
-    # array and a "0/0 links conserve ✓" hero on the frontend. Reject loud.
+    # F1: resolve_link_volumes only accepts the corridor-axis form ('EB/WB' or
+    # 'NB/SB'); anything else is silently skipped, so reject it here.
     VALID_DIRECTIONS = ('EB/WB', 'NB/SB')
     active_links = []
+    pair_axis = {}
     for L in links_in:
         if not isinstance(L, dict):
-            raise HTTPException(status_code=400, detail="each link must be a dict")
+            _bad("The intersection links are in the wrong format.")
+        a, b = _as_int(L.get("fromNum")), _as_int(L.get("toNum"))
+        if a is None or b is None:
+            _bad("Every link needs the numbers of the two intersections it connects.")
+        for x in (a, b):
+            if x not in listed:
+                _bad(f"Link {a}→{b} refers to intersection {x}, which is not in the intersection list.")
+        if a == b:
+            _bad(f"Intersection {a} is linked to itself. Remove that link.")
         direction = L.get("direction")
         if direction not in VALID_DIRECTIONS:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"link {L.get('fromNum')}→{L.get('toNum')} has invalid direction "
-                    f"{direction!r} — expected one of {list(VALID_DIRECTIONS)}. "
-                    "If you exported state from an older DemandIQ build, re-create "
-                    "the link via S2 so suggestDirection assigns the corridor axis."
-                ),
-            )
-        active_links.append({
-            "fromNum": int(L["fromNum"]),
-            "toNum":   int(L["toNum"]),
-            "direction": direction,
-            "mode":    L.get("mode", "Full"),
-        })
+            _bad(f"Link {a}→{b} has an invalid direction ({_show(direction)!r}). Set it to "
+                 "EB/WB or NB/SB (re-create the link on the map if needed).")
+        mode = L.get("mode", "Full")
+        if mode not in ("Full", "Land Use", "None"):
+            _bad(f"Link {a}→{b} has an unknown balance mode ({_show(mode)}). Use Full, Land Use or None.")
+        pair = frozenset((a, b))
+        if pair in pair_axis:
+            if pair_axis[pair] != direction:
+                _bad(f"Intersections {a} and {b} are linked on both EB/WB and NB/SB. "
+                     "Two intersections can share only one street link.")
+            _bad(f"Intersections {a} and {b} are linked twice. Remove the duplicate link.")
+        pair_axis[pair] = direction
+        active_links.append({"fromNum": a, "toNum": b, "direction": direction, "mode": mode})
 
-    def _cast_period(period_vols):
+    # Each leg reaches one neighbour: a second link on the same leg (1→3 next
+    # to 1→2, or a 1-2-3-1 loop) silently double-counts that leg.
+    leg_owner = {}
+    for L in active_links:
+        lo, hi, _ = _orient(L["fromNum"], L["toNum"], L["direction"], coords)
+        sides = ("east", "west") if L["direction"] == "EB/WB" else ("north", "south")
+        for n, side, other in ((lo, sides[0], hi), (hi, sides[1], lo)):
+            if (n, side) in leg_owner:
+                _bad(f"Intersection {n}'s {side} leg is linked to both intersection "
+                     f"{leg_owner[(n, side)]} and intersection {other}. "
+                     "Link each leg to its nearest neighbour only.")
+            leg_owner[(n, side)] = other
+
+    def _cast_period(period):
+        period_vols = unbalanced.get(period)
+        if period_vols is None:
+            return {}
+        if not isinstance(period_vols, dict):
+            _bad(f"The {period} volumes are in the wrong format.")
         out = {}
-        for n_str, mv_dict in (period_vols or {}).items():
-            n = int(n_str)
+        for n_str, mv_dict in period_vols.items():
+            n = _as_int(n_str)
+            if n not in listed:
+                _bad(f"{period} volumes were sent for intersection {_show(n_str)}, "
+                     "which is not in the intersection list.")
+            mv_dict = _check_vols(mv_dict, f"Intersection {n} {period}")
             full = {k: 0.0 for k in ALL_MOVEMENTS}
-            for mv, val in (mv_dict or {}).items():
+            for mv, val in mv_dict.items():
                 if mv in full and val is not None:
                     full[mv] = float(val)
             out[n] = full
         return out
 
-    am_raw = _cast_period(unbalanced.get("AM", {}))
-    pm_raw = _cast_period(unbalanced.get("PM", {}))
+    am_raw = _cast_period("AM")
+    pm_raw = _cast_period("PM")
+    counted = {p: any(any(v.values()) for v in raw.values())
+               for p, raw in (("AM", am_raw), ("PM", pm_raw))}
+    if not any(counted.values()):
+        _bad("No volumes were sent. Enter counts for at least one period (AM or PM).")
 
-    am_result = balance_nchrp(am_raw, active_links, method=method, coords=coords,
-                              tol=tol, max_iter=max_iter)
-    pm_result = balance_nchrp(pm_raw, active_links, method=method, coords=coords,
-                              tol=tol, max_iter=max_iter)
+    # A period with no counts at all (an AM-only project) is skipped. Within a
+    # counted period, every linked intersection needs counts: the link has
+    # nothing to balance against otherwise.
+    for period, raw in (("AM", am_raw), ("PM", pm_raw)):
+        if not counted[period]:
+            continue
+        for L in active_links:
+            for n, other in ((L["fromNum"], L["toNum"]), (L["toNum"], L["fromNum"])):
+                if not any((raw.get(n) or {}).values()):
+                    _bad(f"Intersection {n} has no {period} counts but is linked to "
+                         f"intersection {other}. Enter its {period} counts, or remove the link.")
+
+    am_result = balance_nchrp(am_raw, active_links if counted["AM"] else [], method=method,
+                              coords=coords, tol=tol, max_iter=max_iter)
+    pm_result = balance_nchrp(pm_raw, active_links if counted["PM"] else [], method=method,
+                              coords=coords, tol=tol, max_iter=max_iter)
 
     def _serialize_resolved(resolved, raw_pairs):
         """F7: each resolved-link entry now also carries the raw upstream and
@@ -493,51 +704,99 @@ ALL_MOVEMENTS = [
 ]
 
 
+_RENDER_FAILED = "The diagram could not be drawn. Try again; if it keeps failing, contact support."
+
+
+def _check_geo(geo):
+    """Intersection geometry the renderers read: num, name, legs, streets."""
+    if not isinstance(geo, dict) or _as_int(geo.get("num")) is None:
+        _bad("Each diagram needs an intersection with a whole-number ID (num).")
+    n = geo["num"]
+    if not isinstance(geo.get("name"), str):
+        _bad(f"Intersection {_show(n)} needs a name to draw its diagram.")
+    for key, typ in (("active_legs", list), ("stopped_approaches", list),
+                     ("streets", dict), ("control", str)):
+        if key in geo and not isinstance(geo[key], typ):
+            _bad(f"Intersection {_show(n)}: {key.replace('_', ' ')} is in the wrong format.")
+    if any(not isinstance(v, str) for v in (geo.get("streets") or {}).values()):
+        _bad(f"Intersection {_show(n)}: street names must be text.")
+    return geo
+
+
+def _check_cell(c):
+    """One diagram cell {intersection, u_vols, b_vols, overrides}."""
+    if not isinstance(c, dict):
+        _bad("Each diagram cell is in the wrong format.")
+    geo = _check_geo(c.get("intersection"))
+    where = f"Intersection {geo['num']}"
+    return {
+        "geo": geo,
+        "u_vols": _check_vols(c.get("u_vols"), where),
+        "b_vols": _check_vols(c.get("b_vols"), where),
+        "overrides": _check_vols(c.get("overrides"), f"{where} override"),
+    }
+
+
+def _check_cells(cells_in):
+    if not isinstance(cells_in, list) or not cells_in:
+        _bad("There are no intersections to draw.")
+    if len(cells_in) > MAX_DIAGRAM_CELLS:
+        _bad(f"Too many diagrams in one image ({len(cells_in)}). The limit is {MAX_DIAGRAM_CELLS}.")
+    return [_check_cell(c) for c in cells_in]
+
+
+def _check_view_mode(payload):
+    view_mode = payload.get("view_mode", "combined")
+    if view_mode not in VIEW_MODES:
+        _bad(f"View mode must be one of: {', '.join(VIEW_MODES)}.")
+    return view_mode
+
+
+def _check_cols(payload):
+    cols = _as_int(payload.get("cols", 3))
+    if cols is None or not 1 <= cols <= 20:
+        _bad("Columns must be a whole number from 1 to 20.")
+    return cols
+
+
+def _check_title(payload):
+    title = payload.get("title")
+    if title is not None and not isinstance(title, str):
+        _bad("The diagram title must be text.")
+    return title
+
+
+# Plain def routes from here on: rendering and workbook building are CPU work,
+# so they run in FastAPI's threadpool instead of freezing the event loop.
 @app.post("/intersection-diagram", dependencies=[Depends(require_auth)])
-async def intersection_diagram_endpoint(payload: dict):
+def intersection_diagram_endpoint(payload: dict):
     """Render one intersection as a PNG line diagram.
 
     Wraps backend/line_diagram.render_single_diagram. Returns the PNG as
     base64 inside JSON so the frontend can drop it into an <img src=...>
     without an extra round-trip.
     """
-    intersection = payload.get("intersection")
-    if not isinstance(intersection, dict) or "num" not in intersection:
-        raise HTTPException(status_code=400, detail="intersection must be a dict with 'num'")
-
-    u_vols = payload.get("u_vols", {}) or {}
-    b_vols = payload.get("b_vols", {}) or {}
-    if not isinstance(u_vols, dict) or not isinstance(b_vols, dict):
-        raise HTTPException(status_code=400, detail="u_vols and b_vols must be dicts")
-
-    # Stage 5: optional per-cell engineer overrides for this intersection +
-    # period. Shape: {movement_key: number_value}. Replaces b_vols value for
-    # that cell and adds "*" suffix to the rendered label.
-    overrides = payload.get("overrides", {}) or {}
-    if not isinstance(overrides, dict):
-        raise HTTPException(status_code=400, detail="overrides must be a dict")
-
-    view_mode = payload.get("view_mode", "combined")
-    if view_mode not in VIEW_MODES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"view_mode must be one of {VIEW_MODES}",
-        )
+    # Stage 5: optional per-cell engineer overrides {movement_key: number}
+    # replace the b_vols value and add a "*" suffix to the rendered label.
+    cell = _check_cell({"intersection": payload.get("intersection"), "u_vols": payload.get("u_vols"),
+                        "b_vols": payload.get("b_vols"), "overrides": payload.get("overrides")})
+    view_mode = _check_view_mode(payload)
 
     # Stage 10.4: optional free-text annotation, rendered as a caption strip.
     annotation = payload.get("annotation")
     if annotation is not None and not isinstance(annotation, str):
-        raise HTTPException(status_code=400, detail="annotation must be a string")
+        _bad("The diagram note must be text.")
 
     try:
-        png_bytes = render_single_diagram(intersection, u_vols, b_vols, view_mode,
-                                          overrides=overrides, annotation=annotation)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"render failed: {e}")
+        png_bytes = render_single_diagram(cell["geo"], cell["u_vols"], cell["b_vols"], view_mode,
+                                          overrides=cell["overrides"], annotation=annotation)
+    except Exception:
+        log.exception("intersection diagram render failed")
+        raise HTTPException(status_code=500, detail=_RENDER_FAILED)
 
     px = int(FIG_INCHES * DPI)
     return {
-        "intersection_num": intersection["num"],
+        "intersection_num": cell["geo"]["num"],
         "png_base64": base64.b64encode(png_bytes).decode("ascii"),
         "width": px,
         "height": px,
@@ -545,7 +804,7 @@ async def intersection_diagram_endpoint(payload: dict):
 
 
 @app.post("/export-diagram-grid", dependencies=[Depends(require_auth)])
-async def export_diagram_grid_endpoint(payload: dict):
+def export_diagram_grid_endpoint(payload: dict):
     """Stage 10.5: render every intersection diagram into ONE composite PNG
     grid. Reuses render_single_diagram's cell engine via render_diagram_grid.
 
@@ -559,41 +818,21 @@ async def export_diagram_grid_endpoint(payload: dict):
       }
     Returns: image/png (binary).
     """
-    cells_in = payload.get("cells")
-    if not isinstance(cells_in, list) or not cells_in:
-        raise HTTPException(status_code=400, detail="cells must be a non-empty list")
-
-    view_mode = payload.get("view_mode", "combined")
-    if view_mode not in VIEW_MODES:
-        raise HTTPException(status_code=400, detail=f"view_mode must be one of {VIEW_MODES}")
-
-    cols = payload.get("cols", 3)
-    try:
-        cols = int(cols)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="cols must be an integer")
-
-    cells = []
-    for c in cells_in:
-        if not isinstance(c, dict):
-            raise HTTPException(status_code=400, detail="each cell must be a dict")
-        geo = c.get("intersection")
-        if not isinstance(geo, dict) or "num" not in geo:
-            raise HTTPException(status_code=400, detail="each cell.intersection needs 'num'")
-        cells.append({
-            "geo": geo,
-            "u_vols": c.get("u_vols") or {},
-            "b_vols": c.get("b_vols") or {},
-            "overrides": c.get("overrides") or {},
-            "period_label": c.get("period_label"),
-        })
+    cells = _check_cells(payload.get("cells"))
+    for c, raw in zip(cells, payload["cells"]):
+        label = raw.get("period_label")
+        if label is not None and not isinstance(label, str):
+            _bad("The period label must be text (AM or PM).")
+        c["period_label"] = label
+    view_mode = _check_view_mode(payload)
+    cols = _check_cols(payload)
+    title = _check_title(payload)
 
     try:
-        png_bytes = render_diagram_grid(
-            cells, view_mode=view_mode, cols=cols, title=payload.get("title"),
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"grid render failed: {e}")
+        png_bytes = render_diagram_grid(cells, view_mode=view_mode, cols=cols, title=title)
+    except Exception:
+        log.exception("diagram grid render failed")
+        raise HTTPException(status_code=500, detail=_RENDER_FAILED)
 
     return StreamingResponse(
         io.BytesIO(png_bytes),
@@ -603,13 +842,18 @@ async def export_diagram_grid_endpoint(payload: dict):
 
 
 @app.post("/corridor-diagram", dependencies=[Depends(require_auth)])
-async def corridor_diagram_endpoint(payload: dict):
+def corridor_diagram_endpoint(payload: dict):
     """PRD-03: render the corridor's two line-diagram figures (AM + PM) with
     per-segment link-volume labels between adjacent intersections.
 
     Returns both image bytes in one round-trip — base64 inside JSON so the
     frontend can drop each into an <img src=...> and bundle both into the
     Excel/zip export without an extra fetch.
+
+    Segment labels show the BALANCED flow on each link in both directions
+    (upstream outflow from the balanced volumes), not the resolution target.
+    Corridors of up to line_diagram.CORRIDOR_ONE_ROW_MAX intersections are
+    drawn in one row so every segment gets an in-figure label.
 
     Payload:
       {
@@ -621,7 +865,7 @@ async def corridor_diagram_endpoint(payload: dict):
         },
         "corridor_dir": "EB/WB" | "NB/SB",
         "view_mode": "combined" | "balanced" | "unbalanced" | "delta",
-        "cols": int,                # optional, default 3
+        "cols": int,                # optional, default 3 (used past one row)
         "title": str,               # optional banner (rendered on BOTH figures)
         "b_vols": {                 # optional; if provided overrides cell.b_vols
             "AM": {num_str: {mv: val}}, "PM": {...}
@@ -629,147 +873,148 @@ async def corridor_diagram_endpoint(payload: dict):
       }
     Returns:
       { "am": {png_base64, width, height}, "pm": {...},
-        "segment_counts": {"AM": int, "PM": int}  // count of segment labels drawn,
-                                                  // for FE/QA visibility
+        "segment_counts": {"AM": int, "PM": int}  // segment labels drawn
       }
     """
-    cells_in = payload.get("cells")
-    if not isinstance(cells_in, list) or not cells_in:
-        raise HTTPException(status_code=400, detail="cells must be a non-empty list")
-
-    view_mode = payload.get("view_mode", "combined")
-    if view_mode not in VIEW_MODES:
-        raise HTTPException(status_code=400, detail=f"view_mode must be one of {VIEW_MODES}")
+    cells = _check_cells(payload.get("cells"))
+    view_mode = _check_view_mode(payload)
 
     corridor_dir = payload.get("corridor_dir")
     if corridor_dir not in ("EB/WB", "NB/SB"):
-        raise HTTPException(
-            status_code=400,
-            detail="corridor_dir must be 'EB/WB' or 'NB/SB'",
-        )
+        _bad("Corridor direction must be EB/WB or NB/SB.")
 
     resolved_in = payload.get("resolved_links") or {}
     if not isinstance(resolved_in, dict):
-        raise HTTPException(status_code=400, detail="resolved_links must be a dict")
-    am_resolved = resolved_in.get("AM") or []
-    pm_resolved = resolved_in.get("PM") or []
-    if not isinstance(am_resolved, list) or not isinstance(pm_resolved, list):
-        raise HTTPException(
-            status_code=400,
-            detail="resolved_links.AM and resolved_links.PM must be lists",
-        )
+        _bad("The resolved links are in the wrong format.")
+    resolved = {}
+    for period in ("AM", "PM"):
+        entries = resolved_in.get(period) or []
+        if not isinstance(entries, list):
+            _bad(f"The {period} resolved links are in the wrong format.")
+        for r in entries:
+            if (not isinstance(r, dict) or _as_int(r.get("fromNum")) is None
+                    or _as_int(r.get("toNum")) is None or not isinstance(r.get("direction"), str)
+                    or (r.get("volume") is not None and not _is_num(r.get("volume")))):
+                _bad(f"A {period} resolved link is in the wrong format. Re-run the analysis.")
+        resolved[period] = entries
 
-    cols = payload.get("cols", 3)
-    try:
-        cols = int(cols)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="cols must be an integer")
-
-    title = payload.get("title")
+    cols = _check_cols(payload)
+    title = _check_title(payload)
 
     # Optional per-period balanced volumes — when provided, replace the
     # cell-level b_vols so AM and PM figures differ on the per-cell numbers
     # too (not just the segment labels). The frontend always sends both.
     period_b_vols = payload.get("b_vols") or {}
-    am_b = period_b_vols.get("AM") or {}
-    pm_b = period_b_vols.get("PM") or {}
+    if not isinstance(period_b_vols, dict):
+        _bad("The balanced volumes are in the wrong format.")
 
-    def _build_cells(period_b):
+    def _period_cells(period):
+        period_b = period_b_vols.get(period) or {}
+        if not isinstance(period_b, dict):
+            _bad(f"The {period} balanced volumes are in the wrong format.")
         out = []
-        for c in cells_in:
-            if not isinstance(c, dict):
-                raise HTTPException(status_code=400, detail="each cell must be a dict")
-            geo = c.get("intersection")
-            if not isinstance(geo, dict) or "num" not in geo:
-                raise HTTPException(status_code=400, detail="each cell.intersection needs 'num'")
-            num_str = str(geo["num"])
-            b_vols = period_b.get(num_str) if period_b else None
-            out.append({
-                "geo": geo,
-                "u_vols": c.get("u_vols") or {},
-                "b_vols": b_vols if b_vols is not None else (c.get("b_vols") or {}),
-                "overrides": c.get("overrides") or {},
-            })
+        for c in cells:
+            b_vols = period_b.get(str(c["geo"]["num"]))
+            if b_vols is not None:
+                b_vols = _check_vols(b_vols, f"Intersection {c['geo']['num']} {period}")
+            out.append({**c, "b_vols": b_vols if b_vols is not None else c["b_vols"]})
         return out
 
+    period_cells = {p: _period_cells(p) for p in ("AM", "PM")}
     try:
-        am_cells = _build_cells(am_b)
-        pm_cells = _build_cells(pm_b)
-        am_png = render_corridor_diagram(
-            am_cells, am_resolved, corridor_dir, "AM",
-            view_mode=view_mode, cols=cols, title=title,
-        )
-        pm_png = render_corridor_diagram(
-            pm_cells, pm_resolved, corridor_dir, "PM",
-            view_mode=view_mode, cols=cols, title=title,
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"corridor render failed: {e}")
+        pngs = {p: render_corridor_diagram(period_cells[p], resolved[p], corridor_dir, p,
+                                           view_mode=view_mode, cols=cols, title=title)
+                for p in ("AM", "PM")}
+    except Exception:
+        log.exception("corridor diagram render failed")
+        raise HTTPException(status_code=500, detail=_RENDER_FAILED)
 
-    # segment-label counts: one per same-row adjacent pair that found a
-    # matching resolved-link entry. Useful for the AC test + FE QA.
-    def _count_segments(cells, resolved):
-        from line_diagram import _segment_label_for_pair as _seg
-        n_cells = len(cells)
-        cols_eff = max(1, min(int(cols), n_cells))
-        c = 0
-        for i in range(n_cells - 1):
-            if (i // cols_eff) != ((i + 1) // cols_eff):
-                continue
-            t, _ = _seg(
-                int(cells[i]['geo']['num']), int(cells[i + 1]['geo']['num']),
-                resolved, corridor_dir,
-            )
-            if t is not None:
-                c += 1
-        return c
-
-    import math as _math
     cell_px = int(FIG_INCHES * DPI)
-    def _dims(n_cells):
-        cols_eff = max(1, min(int(cols), n_cells))
-        rows_eff = _math.ceil(n_cells / cols_eff)
-        return cols_eff * cell_px, rows_eff * cell_px
-
-    am_w, am_h = _dims(len(am_cells))
-    pm_w, pm_h = _dims(len(pm_cells))
+    n = len(cells)
+    cols_eff = corridor_cols(n, cols)
+    width, height = cols_eff * cell_px, math.ceil(n / cols_eff) * cell_px
 
     return {
-        "am": {
-            "png_base64": base64.b64encode(am_png).decode("ascii"),
-            "width": am_w,
-            "height": am_h,
-        },
-        "pm": {
-            "png_base64": base64.b64encode(pm_png).decode("ascii"),
-            "width": pm_w,
-            "height": pm_h,
-        },
-        "segment_counts": {
-            "AM": _count_segments(am_cells, am_resolved),
-            "PM": _count_segments(pm_cells, pm_resolved),
-        },
+        p.lower(): {
+            "png_base64": base64.b64encode(pngs[p]).decode("ascii"),
+            "width": width,
+            "height": height,
+        }
+        for p in ("AM", "PM")
+    } | {
+        "segment_counts": {p: count_segment_labels(period_cells[p], resolved[p], corridor_dir)
+                           for p in ("AM", "PM")},
     }
 
 
-@app.post("/export-excel", dependencies=[Depends(require_auth)])
-async def export_excel_endpoint(payload: dict):
-    """Generate the full 8-sheet Excel workbook from the project snapshot.
-
-    Accepts the same shape the frontend persists to localStorage as
-    'demandiq:project'. Returns an .xlsx as a binary stream.
-    """
+def _check_project_state(payload):
+    """Shapes build_workbook relies on; anything else is a 400, not a crash."""
     project = payload.get("project") or {}
+    if not isinstance(project, dict) or not isinstance(project.get("name") or "", str):
+        _bad("The project details are in the wrong format.")
     name = (project.get("name") or "").strip()
     if not name:
-        raise HTTPException(status_code=400, detail="project.name required")
+        _bad("The project needs a name before it can be exported.")
+    for key in ("balancing", "analysis", "forecasting"):
+        if not isinstance(payload.get(key) or {}, dict):
+            _bad(f"The project's {key} section is in the wrong format.")
+    if not isinstance((payload.get("analysis") or {}).get("lastRun") or {}, dict):
+        _bad("The last analysis run is in the wrong format. Re-run the analysis.")
+    intersections = payload.get("intersections") or []
+    if not isinstance(intersections, list):
+        _bad("The intersection list is in the wrong format.")
+    for it in intersections:
+        if not isinstance(it, dict) or _as_int(it.get("num")) is None:
+            _bad("Every intersection needs a whole-number ID (num).")
+        it["num"] = _as_int(it["num"])    # one type, so sorting by num works
+        where = f"Intersection {it['num']}"
+        approaches = it.get("approaches") or {}
+        if not isinstance(approaches, dict):
+            _bad(f"{where}: the approaches are in the wrong format.")
+        for d, ap in approaches.items():
+            if ap is not None and (not isinstance(ap, dict)
+                                   or not isinstance(ap.get("lanes") or [], list)
+                                   or not all(isinstance(l, dict) and isinstance(l.get("movement") or "", str)
+                                              for l in ap.get("lanes") or [])):
+                _bad(f"{where}: the {_show(d)} lane setup is in the wrong format.")
+        for key in ("volumes", "balanced"):
+            per = it.get(key) or {}
+            if not isinstance(per, dict):
+                _bad(f"{where}: {key} are in the wrong format.")
+            for period, vols in per.items():
+                if not isinstance(vols or {}, dict):
+                    _bad(f"{where} {_show(period)}: {key} are in the wrong format.")
+                for mv in ALL_MOVEMENTS:
+                    v = (vols or {}).get(mv)
+                    _check_volume(v.get("value") if isinstance(v, dict) else v,
+                                  f"{where} {period} {mv}")
+    overrides = (payload.get("balancing") or {}).get("overrides") or {}
+    if not isinstance(overrides, dict):
+        _bad("The engineer overrides are in the wrong format.")
+    for period, by_int in overrides.items():
+        if not isinstance(by_int or {}, dict):
+            _bad("The engineer overrides are in the wrong format.")
+        for n, cells in (by_int or {}).items():
+            _check_vols(cells, f"Intersection {_show(n)} {period} override")
+    return name
+
+
+@app.post("/export-excel", dependencies=[Depends(require_auth)])
+def export_excel_endpoint(payload: dict):
+    """Generate the Excel workbook from the project snapshot.
+
+    Accepts the same shape the frontend persists to localStorage as
+    'demandiq:project' (plus an optional IANA "timezone" for the run time).
+    Returns an .xlsx as a binary stream.
+    """
+    name = _check_project_state(payload)
 
     try:
         xlsx_bytes = build_workbook(payload)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"workbook build failed: {e}")
+    except Exception:
+        log.exception("workbook build failed")
+        raise HTTPException(status_code=500, detail="The Excel file could not be built. "
+                            "Try again; if it keeps failing, contact support.")
 
     # Export is the moment the engineer signs off on the numbers, so it is the
     # cleanest place to record raw -> balanced -> override. Never blocks the
@@ -794,7 +1039,7 @@ async def health():
 
 
 @app.get("/capture-stats", dependencies=[Depends(require_auth)])
-async def capture_stats():
+def capture_stats():
     """How much evaluation data has accumulated.
 
     Behind auth, and counts only — no captured values are served. Use it to
