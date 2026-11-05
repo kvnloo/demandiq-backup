@@ -54,11 +54,15 @@ const bad = [
   '99\tAM\t100',     // no project int 99
   '1\tMID\t100',     // bad period
   '1\tAM\t-5',       // negative
+  '1\tAM\t12.5',     // decimal
+  '1\tAM\t999999',   // absurd
 ].join('\n')
 r = parseBulkVolumes(bad, { intersections })
 ok(r.rows[0].errors.some((e) => e.includes('99')), 'unmatched int flagged')
 ok(r.rows[1].errors.some((e) => e.includes('AM or PM')), 'bad period flagged')
-ok(r.rows[2].errors.some((e) => e.includes('unparseable')), 'negative flagged')
+ok(r.rows[2].errors.some((e) => e.includes('negative')), 'negative flagged')
+ok(r.rows[3].errors.some((e) => e.includes('whole number')), 'decimal flagged')
+ok(r.rows[4].errors.some((e) => e.includes('over 20,000')), 'over-limit flagged')
 ok(r.applicableRows === 0, `no applicable rows in bad input, got ${r.applicableRows}`)
 
 // ── 4. Inactive movement at int2 (no NB/SB, no turns) → warn + skip ──────
