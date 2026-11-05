@@ -2,7 +2,7 @@
 #
 # To deploy: push this branch, then in the Render dashboard choose
 # "New +" → "Blueprint" and point it at this repo. Render reads this file,
-# then prompts for the two secrets below (they are deliberately NOT stored here).
+# then prompts for the secrets below (they are deliberately NOT stored here).
 #
 # The free plan sleeps after ~15 minutes idle and takes ~1 minute to wake, so
 # open the URL a few minutes before showing it to anyone. Upgrading the plan to
@@ -23,4 +23,11 @@ services:
       # When set, every route except /health requires basic auth. Set it —
       # a public URL wired to a paid API key should not be open to the internet.
       - key: APP_PASSWORD
+        sync: false
+      # Jev intersection-name suggestions; without it they are silently off.
+      - key: TYPESAFE_API_KEY
+        sync: false
+      # Postgres for captured runs. Without it captures go to SQLite on the
+      # container's ephemeral disk and are lost on every deploy / spin-down.
+      - key: DATABASE_URL
         sync: false
