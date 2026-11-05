@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getProjectMeta, setProjectMeta } from '../store/projectStore'
+import { getProjectMeta, setProjectMeta, importProjectFile, getSnapshot } from '../store/projectStore'
 import SignalFlowHero from '../lib/signal-flow/SignalFlowHero'
 import '../styles/forms.css'
 
@@ -24,6 +24,11 @@ const DEFAULTS = () => ({
 })
 
 const PROJECT_TYPES = ['Corridor', 'Zone', 'Single Intersection']
+const PROJECT_TYPE_HINT = {
+  Corridor: 'Intersections along one main street, balanced link by link.',
+  Zone: 'A group of intersections on several streets (a small network).',
+  'Single Intersection': 'One intersection on its own — no links to balance.',
+}
 const PERIODS = ['AM', 'PM']
 
 const isFilled = (v) => typeof v === 'string' && v.trim().length > 0
@@ -76,6 +81,22 @@ export default function S1_ProjectSetup() {
   const missing = missingRequired(form)
   const isValid = missing.length === 0
 
+  // Open a saved .demandiq.json. It replaces the browser's one project, so ask
+  // first when there is work here; then reload so every screen reads the file.
+  const [openError, setOpenError] = useState(null)
+  const openFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // same file can be picked again after an error
+    if (!file) return
+    const cur = getSnapshot()
+    const hasWork = Boolean(cur.project?.name?.trim() || cur.intersections?.length)
+    if (hasWork && !window.confirm('Opening this file replaces the current project in this browser. Download the current one first (New project → Download project file) if you need it. Open the file?')) return
+    if (saveTimer.current) clearTimeout(saveTimer.current) // don't let the old form overwrite the file
+    const err = await importProjectFile(file)
+    if (err) { setOpenError(err); return }
+    window.location.assign('/')
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!isValid) { setAttempted(true); return } // show what's missing; don't navigate
@@ -114,6 +135,14 @@ export default function S1_ProjectSetup() {
       <p className="di-subtitle">
         Set up the project once. These details flow through every step.
       </p>
+      <div className="di-s1__open">
+        <label className="di-btn-secondary di-s1__open-btn">
+          Open project file…
+          <input type="file" accept=".json,application/json" onChange={openFile} hidden />
+        </label>
+        <span className="di-help">A .demandiq.json saved from Export.</span>
+        {openError && <span className="di-field-error" role="alert">{openError}</span>}
+      </div>
 
       <div className="di-s1__layout">
       <div className="di-form di-s1__form">
@@ -151,6 +180,7 @@ export default function S1_ProjectSetup() {
               )
             })}
           </div>
+          {form.projectType && <span className="di-help">{PROJECT_TYPE_HINT[form.projectType]}</span>}
           {attempted && !form.projectType && (
             <span className="di-field-error">Select a project type</span>
           )}
