@@ -19,14 +19,17 @@ layers are validated through the NetworkLayer Pydantic model.
 """
 
 import io
+import json
 import math
 import re
+import shutil
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from excel_export import build_forecast_workbook
+from forecasting import upload
 from forecasting.contract import NetworkLayer, Period
 from forecasting.adapters.mtc import available_years as mtc_years
 from forecasting.ingest import ADAPTERS, ingest_networks, sandag_years
@@ -148,7 +151,10 @@ def ingest_match(payload: dict):
             year = int(n.get("scenario_year"))
         except (TypeError, ValueError):
             _bad(f"the {role} network needs a model year")
-        norm_networks.append({"role": role, "scenario_year": year})
+        spec = {"role": role, "scenario_year": year}
+        if region == "UPLOAD":   # an upload token + column mapping, never a path
+            spec.update(upload_id=n.get("upload_id"), mapping=n.get("mapping"))
+        norm_networks.append(spec)
     if "base" not in roles:
         _bad("a network with role 'base' is required to match")
 
@@ -173,6 +179,35 @@ def ingest_match(payload: dict):
         "layers": {role: lyr.model_dump(mode="json") for role, lyr in layers.items()},
         "matches": matches,
     }
+
+
+@router.post("/upload-network")
+def upload_network(files: list[UploadFile] = File(...), intersections: str = Form("[]")):
+    """Save an engineer's model file (zip / shapefile parts / .gpkg / .geojson) to
+    a private temp dir, check it, and return its columns + a guessed mapping.
+    Size is capped by app.py's body-size middleware (500 MB for this route)."""
+    try:
+        pts = json.loads(intersections or "[]")
+        if not isinstance(pts, list) or not all(isinstance(p, dict) for p in pts):
+            raise ValueError
+    except ValueError:
+        _bad("intersections must be a JSON list of {num, lat, lng}")
+    try:
+        uid, d = upload.save_upload([(f.filename, f.file) for f in files])
+    except upload.UploadError as e:
+        _bad(str(e))
+    try:
+        return upload.inspect_upload(uid, d, pts)
+    except ModuleNotFoundError:
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(status_code=503, detail=(
+            "Forecasting isn't set up on this server yet (its geo dependencies "
+            "aren't installed) — ask the DemandIQ admin."))
+    except BaseException as e:
+        shutil.rmtree(d, ignore_errors=True)
+        if isinstance(e, upload.UploadError):
+            _bad(str(e))
+        raise
 
 
 @router.post("/export-excel")
