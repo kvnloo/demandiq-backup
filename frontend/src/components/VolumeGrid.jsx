@@ -1,6 +1,7 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import { setCellValue, setPhf, setHvPct } from '../store/projectStore'
 import { gridPaste } from '../lib/gridPaste'
+import { volumeError, MAX_VOLUME } from '../lib/bulkPaste'
 
 const DIRS = ['EB', 'WB', 'NB', 'SB']
 const MVTS = ['U', 'L', 'T', 'R']
@@ -18,26 +19,39 @@ export function activeMovements(approach) {
 }
 
 // One AM-or-PM volume input cell (number, with source colouring + AI badge).
+// A typed value that is not a valid count (negative, decimal, > MAX_VOLUME) is
+// held only in the cell with an inline message — the store keeps its last good
+// value, so a typo can never reach balancing or an export.
 function VolCell({ cell, onChange, onPaste }) {
+  const [bad, setBad] = useState(null) // { text, msg } while the typed value is rejected
   const source = cell?._source
   const value = cell?.value
   const cls =
     source === 'agent'  ? 'di-vol-td--agent'  :
     source === 'manual' ? 'di-vol-td--manual' : ''
   return (
-    <td className={`di-vol-td di-vol-td--cell ${cls}`}>
+    <td className={`di-vol-td di-vol-td--cell ${cls}${bad ? ' di-vol-td--bad' : ''}`}>
       {source === 'agent' && <span className="di-vol-badge">AI</span>}
       <input
         type="number"
         min="0"
+        max={MAX_VOLUME}
+        step="1"
         className="di-vol-input"
-        value={value ?? ''}
+        aria-invalid={bad ? 'true' : undefined}
+        value={bad ? bad.text : (value ?? '')}
         onPaste={onPaste}
         onChange={(e) => {
           const raw = e.target.value
-          onChange(raw === '' ? null : Number(raw))
+          // '' with badInput = the browser can't parse what was typed (e.g. "-")
+          if (raw === '' && !e.target.validity.badInput) { setBad(null); onChange(null); return }
+          const why = raw === '' ? 'not a number' : volumeError(Number(raw))
+          if (why) { setBad({ text: raw, msg: `Not saved: ${why}. Enter a whole number 0–${MAX_VOLUME.toLocaleString()}.` }); return }
+          setBad(null)
+          onChange(Number(raw))
         }}
       />
+      {bad && <span className="di-vol-cell-err" role="alert">{bad.msg}</span>}
     </td>
   )
 }
@@ -65,11 +79,12 @@ const PERIOD_COLS = ['AM', 'PM']
 
 // Paste into any cell: one value, a column, or a block copied from Excel fills
 // down and across from that cell (see lib/gridPaste). Falls back to the
-// browser's own paste when the clipboard holds no numbers.
-function pasteHandler(it, rowKeys, rowIdx, colIdx) {
+// browser's own paste when the clipboard holds no numbers. Cells the paste
+// left unchanged are reported through onSkipped (null when none).
+function pasteHandler(it, rowKeys, rowIdx, colIdx, onSkipped) {
   return (e) => {
-    const writes = gridPaste(e.clipboardData.getData('text'), { rowKeys, nCols: 2, row: rowIdx, col: colIdx })
-    if (writes.length === 0) return
+    const { writes, skipped } = gridPaste(e.clipboardData.getData('text'), { rowKeys, nCols: 2, row: rowIdx, col: colIdx })
+    if (writes.length === 0 && skipped.length === 0) return
     e.preventDefault()
     for (const { row, col, value } of writes) {
       const key = rowKeys[row], period = PERIOD_COLS[col]
@@ -77,6 +92,8 @@ function pasteHandler(it, rowKeys, rowIdx, colIdx) {
       else if (key === 'HV') setHvPct(it.id, period, value)
       else setCellValue(it.id, period, key, value, 'manual')
     }
+    onSkipped(skipped.length === 0 ? null
+      : skipped.map((s) => `${rowKeys[s.row] === 'HV' ? 'HV %' : rowKeys[s.row]} ${PERIOD_COLS[s.col]} (${s.text ? `"${s.text}" ` : ''}${s.reason})`).join(', '))
   }
 }
 
@@ -85,6 +102,7 @@ function pasteHandler(it, rowKeys, rowIdx, colIdx) {
 // intersection spanning every movement as a column). Narrow by design, so it
 // never clips at laptop widths; inactive movements are simply omitted as rows.
 export default function VolumeGrid({ intersections }) {
+  const [pasteNote, setPasteNote] = useState(null) // { id, text } — skipped cells from the last paste
   return (
     <div className="di-vol-wrap">
       <p className="di-vol-hint">
@@ -99,7 +117,8 @@ export default function VolumeGrid({ intersections }) {
         }
         const codesByDir = Object.fromEntries(DIRS.map((d) => [d, MVTS.filter((m) => active[d][m]).map((m) => `${d}${m}`)]))
         const rowKeys = [...DIRS.flatMap((d) => codesByDir[d]), 'PHF', 'HV']
-        const paste = (key, col) => pasteHandler(it, rowKeys, rowKeys.indexOf(key), col)
+        const paste = (key, col) => pasteHandler(it, rowKeys, rowKeys.indexOf(key), col,
+          (text) => setPasteNote(text ? { id: it.id, text } : null))
         return (
           <section key={it.id} className="di-vol-int">
             <div className="di-vol-int__head">
@@ -114,6 +133,13 @@ export default function VolumeGrid({ intersections }) {
                 )}
               </div>
             </div>
+
+            {pasteNote?.id === it.id && (
+              <div className="di-banner di-banner--warn di-vol-paste-note" role="status">
+                Pasted, but these cells were left unchanged: {pasteNote.text}.
+                <button type="button" className="di-vol-paste-note__x" onClick={() => setPasteNote(null)}>Dismiss</button>
+              </div>
+            )}
 
             <table className="di-vol-grid di-vol-grid--mvt">
               <thead>
