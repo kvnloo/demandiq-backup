@@ -14,7 +14,7 @@ import { collectNotes, noteText, WARN_CODES, declineSummary } from '../lib/forec
 
 import '../styles/forms.css'
 import '../styles/forecasting.css'
-import { METHODS, TURN_METHODS, NO_MODEL, readTrend, MODEL_PERIODS, K_WARN } from '../lib/forecastMethods'
+import { METHODS, TURN_METHODS, NO_MODEL, readTrend, modelPeriods, K_WARN } from '../lib/forecastMethods'
 
 const DIRS = ['NB', 'SB', 'EB', 'WB']
 const RESOLUTIONS = [
@@ -90,7 +90,7 @@ export default function F3_RunForecast() {
   const noModel = NO_MODEL.has(settings.refineMethod)
   const refineMethod = noModel || kValid ? settings.refineMethod : 'ratio'
   const { points: trendPts, dropped: trendDropped } = readTrend(settings.trendText)
-  const periods = MODEL_PERIODS[fc.region || 'SANDAG'] ?? MODEL_PERIODS.SANDAG
+  const periods = modelPeriods(fc)
   const kOdd = kValid && (Number(kRaw) < K_WARN.min || Number(kRaw) > K_WARN.max)
   const matchStale = !noModel && isMatchStale(fc)
   const runStale = !!results && isRunStale(fc, settings)
@@ -300,7 +300,7 @@ export default function F3_RunForecast() {
             />
             <p className="di-help" style={{ lineHeight: 1.5 }}>
               The share of the model&apos;s period volume that falls in your counted peak hour.
-              {' '}{fc.region === 'MTC' ? 'MTC' : 'SANDAG'}&apos;s AM period is {periods.AM} and PM is {periods.PM},
+              {' '}{fc.region === 'UPLOAD' ? 'Your model' : fc.region === 'MTC' ? 'MTC' : 'SANDAG'}&apos;s AM period is {periods.AM} and PM is {periods.PM},
               so K is usually about {periods.typicalK}. Not the peak-hour factor (PHF ≈ 0.9) and not
               the daily K-factor (≈ 0.09).
             </p>

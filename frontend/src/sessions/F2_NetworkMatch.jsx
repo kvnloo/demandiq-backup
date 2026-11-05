@@ -12,7 +12,7 @@ import {
 } from '../store/projectStore'
 import ForecastMatchMap from '../components/ForecastMatchMap'
 import { friendlyError, isMatchStale, pullKey } from '../lib/forecastRun'
-import { MODEL_PERIODS } from '../lib/forecastMethods'
+import { MODEL_NAME, modelPeriods } from '../lib/forecastMethods'
 
 import '../styles/forms.css'
 import '../styles/forecasting.css'
@@ -66,13 +66,15 @@ export default function F2_NetworkMatch() {
   )
 
   const networks = fc.networks ?? []
-  const modelName = fc.region === 'MTC' ? 'Bay Area (MTC)' : 'SANDAG'
+  const isUpload = fc.region === 'UPLOAD'
+  const modelName = MODEL_NAME[fc.region || 'SANDAG']
   const canPull =
     networks.length > 0 &&
     networks.some((n) => n.role === 'base') &&
-    networks.every((n) => n.scenarioYear !== '' && n.scenarioYear != null)
+    networks.every((n) => n.scenarioYear !== '' && n.scenarioYear != null &&
+      (!isUpload || (n.uploadId && n.mapping?.am_ab && (n.mapping?.pm_ab || !(snap.project?.analysisPeriods ?? ['PM']).includes('PM')))))
   const stale = isMatchStale(fc)
-  const periods = MODEL_PERIODS[fc.region || 'SANDAG']
+  const periods = modelPeriods(fc)
 
   const pull = async () => {
     setStatus('loading')
@@ -88,6 +90,7 @@ export default function F2_NetworkMatch() {
           })),
           networks: networks.map((n) => ({
             role: n.role, scenario_year: Number(n.scenarioYear),
+            ...(isUpload ? { upload_id: n.uploadId, mapping: n.mapping } : {}),
           })),
         }),
       })
@@ -160,7 +163,7 @@ export default function F2_NetworkMatch() {
         )}
         {!canPull && (
           <div className="di-fc-banner di-fc-banner--warn">
-            Pick the base and horizon model years in{' '}
+            {isUpload ? 'Upload the base and horizon model files and check their columns in' : 'Pick the base and horizon model years in'}{' '}
             <button
               type="button"
               onClick={() => navigate('/forecast/setup')}
@@ -183,7 +186,8 @@ export default function F2_NetworkMatch() {
         <div className="di-fc-pull">
           <DownloadCloud size={28} style={{ color: 'var(--signal-amber)' }} />
           <p>
-            DemandIQ filters the {Number(baseLayer?.links?.length || 0) || '40,720'}-link
+            DemandIQ filters the{' '}
+            {(Number(baseLayer?.links?.length || 0) || (isUpload ? networks[0]?.featureCount : 40720) || '').toLocaleString()}-link{' '}
             {modelName} network to a few hundred feet around your {intersections.length}{' '}
             intersection{intersections.length === 1 ? '' : 's'}, then matches each leg.
           </p>

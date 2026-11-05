@@ -1,6 +1,6 @@
 // Forecast lib tests (QC items 5, 6, 10) — pure ESM, no test runner required:
 //   node frontend/src/lib/forecastRun.test.mjs
-import { readTrend } from './forecastMethods.js'
+import { readTrend, modelPeriods } from './forecastMethods.js'
 import { runKey, runRecord, isRunStale, isMatchStale, pullKey } from './forecastRun.js'
 import { collectNotes, WARN_CODES, declineSummary } from './forecastNotes.js'
 
@@ -17,6 +17,20 @@ function ok(cond, msg) {
   ok(points[2].volume === 19300.5, '19,300.5 read with decimals')
   ok(dropped.length === 3 && dropped.includes('2024 0') && dropped.includes('abc') && dropped.includes('2016 1,2'),
     `zero / text / malformed lines are reported: ${JSON.stringify(dropped)}`)
+}
+
+// ── Uploaded model: new file or column mapping → matches stale; SANDAG keys unchanged ──
+{
+  const sandag = { region: 'SANDAG', networks: [{ role: 'base', scenarioYear: 2025, uploadId: 'x' }] }
+  ok(pullKey(sandag) === JSON.stringify(['SANDAG', [['base', 2025]]]), 'SANDAG pull key ignores upload fields')
+  const fc = { region: 'UPLOAD', matches: [{}], networks: [{ role: 'base', scenarioYear: 2025, uploadId: 'a', mapping: { am_ab: 'AM' } }] }
+  fc.pulledFor = pullKey(fc)
+  ok(!isMatchStale(fc), 'fresh upload pull is not stale')
+  ok(isMatchStale({ ...fc, networks: [{ ...fc.networks[0], mapping: { am_ab: 'AM2' } }] }), 'changed column → stale')
+  ok(isMatchStale({ ...fc, networks: [{ ...fc.networks[0], uploadId: 'b' }] }), 'new file → stale')
+  ok(modelPeriods({ region: 'UPLOAD', periodHours: { AM: '3', PM: 4 } }).AM === '3 h', 'upload AM period from F1 hours')
+  ok(modelPeriods({ region: 'UPLOAD', periodHours: { AM: '4' } }).typicalK === '0.25–0.34', 'K range from period hours')
+  ok(modelPeriods({ region: 'MTC' }).AM.startsWith('6–10'), 'MTC periods unchanged')
 }
 
 // ── Item 6: results go stale when F1 or F3 inputs change ───────────────────
