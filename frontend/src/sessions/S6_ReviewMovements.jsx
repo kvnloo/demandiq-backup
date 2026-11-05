@@ -3,6 +3,7 @@ import { useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { subscribe, getSnapshot } from '../store/projectStore'
 import { stepIndex } from '../lib/reviewMovements'
+import RunStatusBanner from '../components/RunStatusBanner'
 
 import ProvenanceHeader from '../components/reviewMovements/ProvenanceHeader'
 import IntersectionDiagram from '../components/reviewMovements/IntersectionDiagram'
@@ -36,6 +37,7 @@ export default function S6_ReviewMovements() {
 
   return (
     <div className="di-rm">
+      <RunStatusBanner snap={snap} />
       <ProvenanceHeader
         lastRun={lastRun}
         intersection={intersection}

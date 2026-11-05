@@ -16,6 +16,8 @@ import {
 import MapView from '../components/MapView'
 import { buildLinkFlows, lastRunStaleness } from '../lib/flowMap'
 import { exportFlowMapPNG } from '../lib/flowMapExport'
+import RunStatusBanner from '../components/RunStatusBanner'
+import { intLabel } from '../lib/labels'
 
 import '../styles/forms.css'
 import '../styles/map.css'         // .di-banner, .di-btn-*, .di-s2-flow-*, .di-link-popup, .di-flow-popup
@@ -120,17 +122,18 @@ function buildMergedRows(intersections, overrides) {
 }
 
 const isDropRow = (r) => r.AM.delta < 0 || r.PM.delta < 0
+// Stable fallbacks: a fresh [] / {} per render in an effect or memo dependency
+// re-runs it every render (the empty-project render loop).
+const NO_LIST = []
+const NO_OVERRIDES = { AM: {}, PM: {} }
 
 export default function S7_ReviewDrops() {
   const navigate = useNavigate()
   const snap = useSyncExternalStore(subscribe, getSnapshot, () => ({}))
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- store-derived; a fresh [] ref only when empty, useMemo isn't worth it
-  const intersections = snap.intersections || []
+  const intersections = snap.intersections ?? NO_LIST
   const lastRun = snap.analysis?.lastRun ?? null
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- store-derived; fresh ref only when absent, useMemo isn't worth it
-  const overrides = snap.balancing?.overrides ?? { AM: {}, PM: {} }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- store-derived; a fresh [] ref only when empty, useMemo isn't worth it
-  const links = snap.links || []
+  const overrides = snap.balancing?.overrides ?? NO_OVERRIDES
+  const links = snap.links ?? NO_LIST
   const project = snap.project || {}
 
   // ── Flow map (relocated from S2) ───────────────────────────────────
@@ -179,7 +182,10 @@ export default function S7_ReviewDrops() {
   )
 
   // Total drops (informational — does not gate row inclusion).
-  const dropCount = useMemo(() => allRows.filter(isDropRow).length, [allRows])
+  const dropCount = useMemo(() => ({
+    AM: allRows.filter((r) => r.AM.delta < 0).length,
+    PM: allRows.filter((r) => r.PM.delta < 0).length,
+  }), [allRows])
 
   const visibleRows = useMemo(() => {
     const filtered = allRows
@@ -303,6 +309,7 @@ export default function S7_ReviewDrops() {
 
   return (
     <div className="di-s7r">
+      <RunStatusBanner snap={snap} />
       <header className="di-s7r__head">
         <div>
           <button
@@ -463,7 +470,7 @@ export default function S7_ReviewDrops() {
             <>
               <span>{visibleRows.length} of {allRows.length} movements shown</span>
               <span className="di-s7r__meta-aux">
-                {dropCount} drop{dropCount === 1 ? '' : 's'} across both periods
+                Drops below raw: AM {dropCount.AM} · PM {dropCount.PM}
               </span>
               {totalOverrides > 0 && (
                 <span className="di-s7r__override-badge">
@@ -509,6 +516,7 @@ export default function S7_ReviewDrops() {
                 key={period}
                 period={period}
                 rows={linkConservation[period]}
+                intersections={intersections}
               />
             ))}
           </div>
@@ -650,7 +658,8 @@ function OverrideInput({ period, intNum, movement, balanced, currentOverride }) 
   )
 }
 
-function LinkConservationPanel({ period, rows }) {
+function LinkConservationPanel({ period, rows, intersections }) {
+  const byNum = new Map(intersections.map((it) => [String(it.num), it]))
   return (
     <div className="di-s7r__lc">
       <h4 className="di-s7r__lc-title">{period}</h4>
@@ -670,7 +679,7 @@ function LinkConservationPanel({ period, rows }) {
             const ok = Math.abs(r.delta) <= 0.5
             return (
               <tr key={i} className={ok ? '' : 'di-s6-lc__row--warn'}>
-                <td>{r.fromNum} → {r.toNum}</td>
+                <td>{intLabel(byNum.get(String(r.fromNum)), r.fromNum)} → {intLabel(byNum.get(String(r.toNum)), r.toNum)}</td>
                 <td>{r.direction}</td>
                 <td>{r.mode}</td>
                 <td style={{ textAlign: 'right' }}>{r.upstream_outflow.toFixed(0)}</td>
@@ -767,7 +776,7 @@ function FlowDirectionSection({ directed, preFlow, postFlow, showPostFields }) {
         <span className="di-flow-popup__sec-dir">{directed.direction}</span>
         {' '}
         <span className="di-flow-popup__sec-route">
-          {directed.from.num} → {directed.to.num}
+          {intLabel(directed.from)} → {intLabel(directed.to)}
         </span>
       </div>
       <div className="di-flow-popup__row">

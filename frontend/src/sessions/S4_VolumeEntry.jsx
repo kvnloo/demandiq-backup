@@ -17,6 +17,7 @@ import VolumeGrid from '../components/VolumeGrid'
 import { matchAgentToProject } from '../lib/matching'
 import { parseBulkVolumes, applyParsedRows, MOVEMENT_CODES } from '../lib/bulkPaste'
 
+import { friendlyError } from '../lib/apiError'
 import '../styles/forms.css'
 import '../styles/map.css'         // .di-modal*, .di-banner, .di-btn-secondary, .di-btn-primary
 import '../styles/volumes.css'
@@ -122,7 +123,8 @@ export default function S4_VolumeEntry() {
       setFiles((prev) =>
         prev.map((f) => {
           if (f.status !== 'processing') return f
-          if (errMap.has(f.name)) return { ...f, status: 'error', error: errMap.get(f.name) }
+          // The parser's own message (e.g. pypdf "No /Root object!") means nothing to an engineer.
+          if (errMap.has(f.name)) return { ...f, status: 'error', error: "Couldn't read this file — check it is a turning-movement count report (PDF, Excel or CSV) and not damaged." }
           return { ...f, status: 'done' }
         })
       )
@@ -201,12 +203,11 @@ export default function S4_VolumeEntry() {
       })
       setExtracted((prev) => [...prev, ...newExtracted])
     } catch (err) {
-      setExtractError(
-        `Extraction failed: ${err.message}. Make sure the backend is running at localhost:8000 (cd backend && python3.12 app.py).`
-      )
+      const msg = friendlyError(err)
+      setExtractError(`Couldn't read the count files. ${msg}`)
       setFiles((prev) =>
         prev.map((f) =>
-          f.status === 'processing' ? { ...f, status: 'error', error: err.message } : f
+          f.status === 'processing' ? { ...f, status: 'error', error: msg } : f
         )
       )
     } finally {
@@ -602,7 +603,7 @@ function UnmatchedRow({ agent, suggestion, intersections, onApply, onDismiss }) 
         </div>
         {suggestion && target === suggestion.pid && (
           <div className="di-vol-unm__source">
-            Suggested by Jev · {Math.round(suggestion.p * 100)}% sure — check, then Apply
+            Suggested by Jev · {Math.min(99, Math.round(suggestion.p * 100))}% likely — check, then Apply
           </div>
         )}
       </div>

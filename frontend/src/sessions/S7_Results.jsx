@@ -9,7 +9,10 @@ import {
   setDiagramNote,
 } from '../store/projectStore'
 import DiagramCard from '../components/DiagramCard'
-import { largestLinkGap } from '../lib/resultsKpis'
+import { largestLinkGap, enteringTotal as sumEntering } from '../lib/resultsKpis'
+import RunStatusBanner from '../components/RunStatusBanner'
+import { intLabel } from '../lib/labels'
+import { friendlyError } from '../lib/apiError'
 import ResultsMap from '../components/ResultsMap'
 import { buildPayload } from '../lib/diagramPayload'
 
@@ -28,6 +31,16 @@ const PERIODS = [
   { value: 'AM', label: 'AM' },
   { value: 'PM', label: 'PM' },
 ]
+// What the numbers on the diagrams mean, per view.
+const VIEW_LEGEND = {
+  combined: 'Diagram numbers: raw count (balanced volume). * marks an engineer override.',
+  balanced: 'Diagram numbers: balanced volume. * marks an engineer override.',
+  unbalanced: 'Diagram numbers: raw count as entered.',
+  delta: 'Diagram numbers: balanced minus raw (+ went up, − went down).',
+}
+// Stable fallbacks so effect dependencies don't change every render.
+const NO_LIST = []
+const NO_OVERRIDES = { AM: {}, PM: {} }
 
 function hasAnyBalanced(intersections) {
   for (const it of intersections) {
@@ -61,15 +74,15 @@ async function fetchDiagram(payload) {
 export default function S7_Results() {
   const navigate = useNavigate()
   const snap = useSyncExternalStore(subscribe, getSnapshot, () => ({}))
-  const intersections = snap.intersections || []
-  const links = snap.links || []   // explicit corridor graph — same source S2 uses
+  const intersections = snap.intersections ?? NO_LIST
+  const links = snap.links ?? NO_LIST   // explicit corridor graph — same source S2 uses
   const lastRun = snap.analysis?.lastRun ?? null
   const period   = snap.results?.period   ?? 'AM'
   const viewMode = snap.results?.viewMode ?? 'combined'
   const timestamp = lastRun?.timestamp ?? ''
   // Stage 5: engineer overrides invalidate diagram cache (any override change
   // means a different rendered PNG). Hash-stringify for cache-key suffix.
-  const overrides = snap.balancing?.overrides ?? { AM: {}, PM: {} }
+  const overrides = snap.balancing?.overrides ?? NO_OVERRIDES
   const overridesKey = JSON.stringify(overrides)
 
   const needsRun = intersections.length === 0 || !hasAnyBalanced(intersections)
@@ -98,7 +111,7 @@ export default function S7_Results() {
     updateEntry(key, { status: 'loading' })
     fetchDiagram(buildPayload(it, p, v, overrides))
       .then((data) => updateEntry(key, { status: 'done', png: data.png_base64 }))
-      .catch((err) => updateEntry(key, { status: 'error', error: err.message }))
+      .catch((err) => updateEntry(key, { status: 'error', error: friendlyError(err) }))
   }
 
   // Kick off any missing fetches. Fire-and-forget — each updates state
@@ -126,12 +139,7 @@ export default function S7_Results() {
   // KPI figures for the strip below the toolbar. Both are null when the run
   // did not produce the underlying data, which the strip renders as an em dash
   // rather than a zero.
-  const enteringTotal = intersections.reduce((sum, it) => {
-    const bal = (it.balanced || {})[period]
-    if (!bal) return sum
-    return sum + Object.values(bal).reduce(
-      (a, v) => a + (typeof v === 'number' ? v : 0), 0)
-  }, 0) || null
+  const enteringTotal = sumEntering(intersections, period, overrides)
 
   const linkGap = largestLinkGap(lastRun, period)
 
@@ -142,6 +150,7 @@ export default function S7_Results() {
 
   return (
     <div className="di-s7">
+      <RunStatusBanner snap={snap} />
       <div className="di-s7__toolbar">
         <div className="di-s7__toolbar-l">
           <span className="di-s7__toolbar-label">Period</span>
@@ -191,10 +200,12 @@ export default function S7_Results() {
           <span className="sf-kpi__label">Largest count gap</span>
           <span className="sf-kpi__value">
             {linkGap === null ? '—' : linkGap.gap.toLocaleString()}
-            {linkGap ? <small>veh/h · #{linkGap.fromNum}→#{linkGap.toNum} {linkGap.direction}</small> : <small>no shared links compared</small>}
+            {linkGap ? <small>veh/h · {linkGap.direction} {intLabel(intersections.find((it) => it.num === linkGap.fromNum), linkGap.fromNum)} → {intLabel(intersections.find((it) => it.num === linkGap.toNum), linkGap.toNum)}</small> : <small>no shared links compared</small>}
           </span>
         </div>
       </div>
+
+      <p className="di-s7__legend">{VIEW_LEGEND[viewMode]}</p>
 
       <div className="di-s7__body">
         <div className="di-s7__left">

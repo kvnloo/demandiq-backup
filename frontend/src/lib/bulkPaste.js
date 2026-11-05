@@ -76,6 +76,19 @@ export function parseVolumeNumeric(raw) {
   return Number.isFinite(n) ? n : NaN
 }
 
+// Largest believable one-hour movement count; anything above is a typo.
+export const MAX_VOLUME = 20000
+
+// Why a turning-movement count can't be stored, or null when it can.
+// Counts are whole vehicles: no negatives, no decimals, nothing absurd.
+export function volumeError(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return 'not a number'
+  if (n < 0) return 'negative'
+  if (!Number.isInteger(n)) return 'not a whole number'
+  if (n > MAX_VOLUME) return `over ${MAX_VOLUME.toLocaleString()}`
+  return null
+}
+
 // Recognize a normalized header token as "any known header role".
 // Used to decide whether row-1 is a header or data.
 function isKnownHeader(h) {
@@ -260,8 +273,9 @@ export function parseBulkVolumes(text, { intersections = [] } = {}) {
     const writeCell = (code, raw) => {
       if (raw === '' || raw == null) return
       const n = parseVolumeNumeric(raw)
-      if (!Number.isFinite(n) || n < 0) {
-        row.errors.push(`row ${rowNo}: unparseable value "${raw}" for ${code}`)
+      const bad = volumeError(n)
+      if (bad) {
+        row.errors.push(`row ${rowNo}: value "${raw}" for ${code} is ${bad}`)
         return
       }
       if (active && active.size > 0 && !active.has(code)) {
@@ -347,8 +361,9 @@ function parseVerticalSingleIntersection(lines, delim, result) {
     }
     if (valRaw === '') continue
     const n = parseVolumeNumeric(valRaw)
-    if (!Number.isFinite(n) || n < 0) {
-      row.errors.push(`row ${rowNo}: unparseable value "${valRaw}" for ${codeRaw}`)
+    const bad = volumeError(n)
+    if (bad) {
+      row.errors.push(`row ${rowNo}: value "${valRaw}" for ${codeRaw} is ${bad}`)
       result.skippedRows += 1
       continue
     }

@@ -9,6 +9,9 @@ import {
   crossStreetDirs,
   stopHint,
   incompleteStopControls,
+  withMissingLeg,
+  missingLeg,
+  incompleteThreeLegs,
   STOP_CONTROL_TYPES,
   AUTO_FILL_TYPES,
 } from './stopControl.js'
@@ -147,6 +150,18 @@ ok(incompleteStopControls([it('a', 1, 'All-way stop', ap()), it('b', 2, 'Signali
 // Missing approaches object → incomplete (needs stops set).
 ok(incompleteStopControls([it('a', 1, 'One-way stop', undefined)]).length === 1,
   'stop control with no approaches object → incomplete')
+
+// 3-leg: exactly the named approach is removed; switching it restores the old one.
+{
+  const t1 = withMissingLeg(fourLeg(), 'WB')
+  ok(t1.WB.exists === false && t1.WB.lanes.length === 0, '3-leg: named approach does not exist')
+  ok(['EB', 'NB', 'SB'].every((d) => t1[d].exists === true), '3-leg: the other three exist')
+  const t2 = withMissingLeg(t1, 'NB')
+  ok(t2.WB.exists === true && t2.WB.lanes.length === 1 && t2.NB.exists === false, 'switching the missing leg restores the old one')
+  ok(missingLeg(t2) === 'NB' && missingLeg(withMissingLeg(t2, null)) === null, 'missingLeg / back to 4-leg')
+  ok(incompleteThreeLegs([{ id: 'a', num: 1, legs: '3-leg', approaches: fourLeg() }, { id: 'b', num: 2, legs: '3-leg', approaches: t1 }])
+    .map((b) => b.num).join() === '1', '3-leg without a missing approach blocks')
+}
 
 console.log(`stopControl: ${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)
