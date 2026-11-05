@@ -21,11 +21,30 @@ export const TURN_METHODS = [
 
 export const NO_MODEL = new Set(METHODS.filter((m) => m.noModel).map((m) => m.id))
 
-// "2015 18200" lines (or "2015, 18200") → [{year, volume}]
-export function parseTrend(text) {
-  return String(text || '')
-    .split(/\n+/)
-    .map((l) => l.trim().split(/[\s,;\t]+/).map(Number))
-    .filter((p) => p.length >= 2 && p[0] > 1900 && p[1] > 0)
-    .map(([year, volume]) => ({ year, volume }))
+// Model time periods per region — the denominator of K (peak hour ÷ model period).
+// SANDAG: Regional Plan Appendix M Table M.2; MTC: TM1 TimePeriods.
+export const MODEL_PERIODS = {
+  SANDAG: { AM: '6–9 am (3 h)', PM: '3:30–7 pm (3.5 h)', typicalK: '0.30–0.45' },
+  MTC: { AM: '6–10 am (4 h)', PM: '3–7 pm (4 h)', typicalK: '0.25–0.35' },
 }
+export const K_WARN = { min: 0.15, max: 0.6 }
+
+// One past count per line: "2015 18200", "2015, 18,200", "2015;18200".
+// Returns { points: [{year, volume}], dropped: [line text] } — every non-blank
+// line that isn't a 4-digit year + positive volume is reported, never ignored.
+export function readTrend(text) {
+  const points = []
+  const dropped = []
+  for (const raw of String(text || '').split(/\n+/)) {
+    const line = raw.trim()
+    if (!line) continue
+    const m = line.match(/^(\d{4})\s*[\s,;\t]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)$/)
+    const year = m ? Number(m[1]) : NaN
+    const volume = m ? Number(m[2].replace(/,/g, '')) : NaN
+    if (year > 1900 && volume > 0) points.push({ year, volume })
+    else dropped.push(line)
+  }
+  return { points, dropped }
+}
+
+export const parseTrend = (text) => readTrend(text).points

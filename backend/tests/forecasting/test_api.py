@@ -73,9 +73,9 @@ def test_ingest_match_requires_networks():
     assert r.status_code == 400
 
 
-def test_ingest_match_sanitizes_path_to_data_dir(monkeypatch):
-    # A traversal attempt must be stripped to a basename under data/sandag — the
-    # client can never read outside the server's network data dir.
+def test_ingest_match_never_takes_a_client_path(monkeypatch):
+    # The server picks the file from (region, model year); a client path — even a
+    # traversal attempt — is dropped before ingest, so nothing can escape data/.
     captured = {}
 
     def _capture(intersections, networks, **kw):
@@ -89,8 +89,7 @@ def test_ingest_match_sanitizes_path_to_data_dir(monkeypatch):
         "networks": [{"role": "base", "scenario_year": 2025, "path": "../../../etc/passwd"}],
     })
     assert r.status_code == 200
-    p = captured["networks"][0]["path"].replace("\\", "/")
-    assert p.endswith("/data/sandag/passwd")
+    assert captured["networks"] == [{"role": "base", "scenario_year": 2025}]
 
 
 def test_ingest_match_503_without_geo(monkeypatch):
@@ -189,15 +188,15 @@ def test_run_scenario_factor_non_numeric_400():
 
 
 # ── Integration: real ingest-match end to end (gated) ─────────────────────────
-REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad.shp"
+REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad_2025.shp"
 
 
 @pytest.mark.skipif(not REAL_SHP.exists(),
-                    reason="real SANDAG hwyLoad.shp not present (local-only)")
+                    reason="real SANDAG hwyLoad_2025.shp not present (local-only)")
 def test_ingest_match_real_file():
     r = client.post("/forecast/ingest-match", json={
         "intersections": [{"num": 1, "lat": 32.624067, "lng": -116.959736}],
-        "networks": [{"role": "base", "scenario_year": 2025, "path": str(REAL_SHP)}],
+        "networks": [{"role": "base", "scenario_year": 2025}],
     })
     assert r.status_code == 200
     body = r.json()

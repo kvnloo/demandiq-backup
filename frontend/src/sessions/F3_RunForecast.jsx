@@ -9,11 +9,12 @@ import {
   setForecasting,
   isExistingAnalysisDone,
 } from '../store/projectStore'
-import { runForecast } from '../lib/forecastRun'
+import { runForecast, friendlyError, isMatchStale, isRunStale, runRecord } from '../lib/forecastRun'
+import { collectNotes, noteText, WARN_CODES, declineSummary } from '../lib/forecastNotes'
 
 import '../styles/forms.css'
 import '../styles/forecasting.css'
-import { METHODS, TURN_METHODS, NO_MODEL, parseTrend } from '../lib/forecastMethods'
+import { METHODS, TURN_METHODS, NO_MODEL, readTrend, MODEL_PERIODS, K_WARN } from '../lib/forecastMethods'
 
 const DIRS = ['NB', 'SB', 'EB', 'WB']
 const RESOLUTIONS = [
@@ -83,12 +84,16 @@ export default function F3_RunForecast() {
     )
   }
 
-  // Difference/Combined are only dimensionally valid with a peak-hour factor K.
+  // Difference/Combined are only dimensionally valid with K (peak hour ÷ model period).
   const kRaw = settings.peakHourFactor
   const kValid = kRaw !== '' && kRaw != null && Number(kRaw) > 0
   const noModel = NO_MODEL.has(settings.refineMethod)
   const refineMethod = noModel || kValid ? settings.refineMethod : 'ratio'
-  const trendPts = parseTrend(settings.trendText)
+  const { points: trendPts, dropped: trendDropped } = readTrend(settings.trendText)
+  const periods = MODEL_PERIODS[fc.region || 'SANDAG'] ?? MODEL_PERIODS.SANDAG
+  const kOdd = kValid && (Number(kRaw) < K_WARN.min || Number(kRaw) > K_WARN.max)
+  const matchStale = !noModel && isMatchStale(fc)
+  const runStale = !!results && isRunStale(fc, settings)
   const yearsSet = !!fc.baseYear && !!fc.horizonYear
   const growthReady = refineMethod === 'trend'
     ? new Set(trendPts.map((p) => p.year)).size >= 3
@@ -103,7 +108,7 @@ export default function F3_RunForecast() {
 
   const canRun = status !== 'loading' && (noModel
     ? growthReady && yearsSet
-    : hasBase && hasHorizon && unresolved === 0 && (matches?.length ?? 0) > 0)
+    : hasBase && hasHorizon && unresolved === 0 && (matches?.length ?? 0) > 0 && !matchStale)
 
   const run = async () => {
     setStatus('loading')
@@ -113,10 +118,11 @@ export default function F3_RunForecast() {
       // unless a valid K unlocked difference/combined.
       const runSettings = { ...settings, refineMethod }
       const data = await runForecast({ snap, settings: runSettings })
-      setForecasting({ results: data, settings })
+      // Store what the run used, so F4/S8 label these numbers — not later edits.
+      setForecasting({ results: data, settings, run: runRecord(fc, settings) })
       setStatus('idle')
     } catch (err) {
-      setError(`${err.message}. Make sure the backend is running under the combined venv (cd backend && .venv-forecasting/bin/python app.py).`)
+      setError(friendlyError(err))
       setStatus('error')
     }
   }
@@ -155,7 +161,7 @@ export default function F3_RunForecast() {
         <div className="di-form">
           {/* ── Link resolution (only the per-intersection method balances links) ── */}
           {settings.turnMethod === 'furness' && <div className="di-field">
-            <label className="di-label">Link disagreement resolution</label>
+            <label className="di-label">When neighbouring counts disagree on a link</label>
             <div className="di-pill-group">
               {RESOLUTIONS.map((r) => (
                 <button
@@ -169,6 +175,10 @@ export default function F3_RunForecast() {
                 </button>
               ))}
             </div>
+            <p className="di-help">
+              Two neighbouring intersections can count different volumes on the road between
+              them. Larger uses the bigger count; Average splits the difference.
+            </p>
           </div>}
 
           {/* ── Refinement method ───────────────────────────────────── */}
@@ -193,8 +203,8 @@ export default function F3_RunForecast() {
             <p className="di-help" style={{ lineHeight: 1.5 }}>
               {METHODS.find((m) => m.id === refineMethod)?.help}
               {!noModel && (
-                <>{' '}Model flows are period volumes (e.g. 6–10 am) and counts are one peak hour,
-                so every model method except Ratio needs the peak-hour factor K below.</>
+                <>{' '}Model flows are whole-period volumes (AM {periods.AM}, PM {periods.PM}) and
+                counts are one peak hour, so every model method except Ratio needs K below.</>
               )}
             </p>
             {refineMethod === 'trend' && (
@@ -212,7 +222,14 @@ export default function F3_RunForecast() {
                 <p className="di-help">
                   Same location and kind of count each year (e.g. Caltrans AADT or a yearly PM count).
                   {trendPts.length > 0 && ` ${trendPts.length} read.`} Needs 3+ years; 10 is better (VDOT).
+                  {' '}Counts must be from the count year or earlier.
                 </p>
+                {trendDropped.length > 0 && (
+                  <div className="di-fc-banner di-fc-banner--warn">
+                    {trendDropped.length} line{trendDropped.length === 1 ? '' : 's'} not read (need a year and a
+                    volume above 0): {trendDropped.map((l) => `“${l}”`).join(', ')}
+                  </div>
+                )}
               </>
             )}
             {refineMethod === 'rate' && (
@@ -267,20 +284,33 @@ export default function F3_RunForecast() {
             )}
           </div>
 
-          {/* ── Advanced: peak-hour factor ──────────────────────────── */}
+          {/* ── Advanced: K = peak hour ÷ model period ──────────────── */}
           {!noModel && <div className="di-field">
-            <label className="di-label" htmlFor="fc-k">Peak-hour factor K (optional)</label>
+            <label className="di-label" htmlFor="fc-k">Peak hour ÷ model period (K) — optional</label>
             <input
               id="fc-k"
               className="di-input"
               type="number"
               inputMode="decimal"
               step="0.01"
-              placeholder="e.g. 0.40 — leave blank to use Ratio"
+              placeholder="e.g. 0.35 — leave blank to use Ratio"
               value={settings.peakHourFactor}
               onChange={(e) => update('peakHourFactor', e.target.value)}
               style={{ maxWidth: 280 }}
             />
+            <p className="di-help" style={{ lineHeight: 1.5 }}>
+              The share of the model&apos;s period volume that falls in your counted peak hour.
+              {' '}{fc.region === 'MTC' ? 'MTC' : 'SANDAG'}&apos;s AM period is {periods.AM} and PM is {periods.PM},
+              so K is usually about {periods.typicalK}. Not the peak-hour factor (PHF ≈ 0.9) and not
+              the daily K-factor (≈ 0.09).
+            </p>
+            {kOdd && (
+              <div className="di-fc-banner di-fc-banner--warn">
+                K = {Number(kRaw)} is outside the usual {K_WARN.min}–{K_WARN.max}.
+                {Number(kRaw) > K_WARN.max ? ' Is this a peak-hour factor (PHF)?' : ' Is this a daily K-factor?'}
+                {' '}K here is peak hour ÷ model period. You can still run with it.
+              </div>
+            )}
           </div>}
 
           {!noModel && !hasHorizon && (
@@ -290,6 +320,20 @@ export default function F3_RunForecast() {
               Add the {snap.forecasting?.horizonYear || '2030'} network in step 1 and re-pull
               in step 2. (You can dry-run today by tagging the same file as both base and
               horizon in step 1 — identity growth returns the existing counts.)
+            </div>
+          )}
+
+          {matchStale && (
+            <div className="di-fc-banner di-fc-banner--warn">
+              Step 1 changed since the network was pulled (model years or region) — re-pull in{' '}
+              <button
+                type="button"
+                onClick={() => navigate('/forecast/match')}
+                style={{ background: 'none', border: 'none', color: 'var(--signal-amber)', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
+              >
+                Network Match
+              </button>{' '}
+              before running.
             </div>
           )}
 
@@ -321,18 +365,24 @@ export default function F3_RunForecast() {
             <div className="di-fc-banner di-fc-banner--error" role="alert">{error}</div>
           )}
 
-          {results && <RunDiagnostics results={results} />}
+          {results && runStale && (
+            <div className="di-fc-banner di-fc-banner--warn" role="alert">
+              Inputs changed since this run — the results below are from the earlier run
+              ({fc.run?.baseYear || '?'} → {fc.run?.horizonYear || '?'}). Run the forecast again to update them.
+            </div>
+          )}
+          {results && <RunDiagnostics results={results} stale={runStale} />}
         </div>
       )}
     </div>
   )
 }
 
-function RunDiagnostics({ results }) {
+function RunDiagnostics({ results, stale }) {
   const navigate = useNavigate()
   return (
-    <div className="di-fc-diag">
-      <div className="di-fc-summary" style={{ marginBottom: 4 }}>Run complete</div>
+    <div className="di-fc-diag" style={stale ? { opacity: 0.6 } : undefined}>
+      <div className="di-fc-summary" style={{ marginBottom: 4 }}>{stale ? 'Earlier run (out of date)' : 'Run complete'}</div>
       {Object.entries(results).map(([period, data]) => (
         <PeriodDiag key={period} period={period} data={data} />
       ))}
@@ -357,23 +407,12 @@ function PeriodDiag({ period, data }) {
   const qc = data.pass2?.qc_flags?.length ?? 0
 
   // One line per distinct note, with where it applies (a corridor-wide note
-  // would otherwise repeat on every leg).
-  const byMsg = new Map()
-  const note = (msg, where) => byMsg.set(msg, [...(byMsg.get(msg) ?? []), where])
-  for (const r of data.refinement ?? []) {
-    for (const d of ['NB', 'SB', 'EB', 'WB']) {
-      const leg = r.approaches?.[d]
-      if (!leg) continue
-      for (const dir of ['inbound', 'outbound']) {
-        for (const f of leg[dir]?.flags ?? []) note(f.message, `Int ${r.intersection_num} ${d} ${dir === 'inbound' ? 'in' : 'out'}`)
-      }
-    }
-  }
-  for (const n of nums) {
-    for (const f of data.pass1?.meta?.[n]?.flags ?? []) note(f.message, `Int ${n}`)
-  }
-  const refFlags = [...byMsg].map(([msg, where]) =>
-    where.length > 3 ? `${msg} (${where.length} places)` : `${where.join(', ')}: ${msg}`)
+  // would otherwise repeat on every leg). Trust-changing notes are shown open.
+  const notes = collectNotes(data)
+  const warnings = notes.filter((n) => WARN_CODES.has(n.code) && n.code !== 'REFINE-DECLINE').map(noteText)
+  const declines = declineSummary(notes)
+  if (declines) warnings.push(declines)
+  const refFlags = notes.filter((n) => !WARN_CODES.has(n.code)).map(noteText)
   const residuals = nums.map((n) => data.pass1?.meta?.[n]?.residual ?? 0)
   const maxResid = residuals.length ? Math.max(...residuals) : 0
 
@@ -392,6 +431,9 @@ function PeriodDiag({ period, data }) {
           {qc === 0 ? 'no QC flags' : `${qc} QC flag${qc === 1 ? '' : 's'}`}
         </span>
       </div>
+      {warnings.map((n, i) => (
+        <div key={i} className="di-fc-banner di-fc-banner--warn" style={{ marginTop: 6 }}>⚠ {n}</div>
+      ))}
       {refFlags.length > 0 && (
         <details className="di-fc-diag__flags">
           <summary>{refFlags.length} note{refFlags.length === 1 ? '' : 's'}</summary>

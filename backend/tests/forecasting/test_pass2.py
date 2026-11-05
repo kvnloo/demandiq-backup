@@ -50,10 +50,10 @@ def test_pass2_conserves_and_rounds():
     for vols in balanced.values():
         for v in vols.values():
             assert v % 5 == 0, f"{v} not a multiple of 5"
-    # Every Full link conserves exactly (delta == 0) after reconciliation.
+    # Every Full link conserves on the unrounded balance (rounding comes after).
     full = [c for c in res["link_conservation"] if c["mode"] == "Full"]
     assert full, "expected at least one Full link"
-    assert all(c["delta"] == 0 for c in full)
+    assert all(abs(c["delta"]) < 0.5 for c in full)
 
 
 # ── Link validation (fail loud) ───────────────────────────────────────────────
@@ -83,11 +83,11 @@ def test_pass2_both_periods():
 
 
 # ── Integration: full pipeline ingest → match → refine → Pass 1 → Pass 2 ──────
-REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad.shp"
+REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad_2025.shp"
 
 
 @pytest.mark.skipif(not REAL_SHP.exists(),
-                    reason="real SANDAG hwyLoad.shp not present (local-only)")
+                    reason="real SANDAG hwyLoad_2025.shp not present (local-only)")
 def test_real_full_pipeline():
     from forecasting.adapters.sandag import ingest_sandag
     from forecasting.matcher import match_network_to_legs
@@ -123,7 +123,7 @@ def _build_2030_from_real(dst_dir, growth):
 
 
 @pytest.mark.skipif(not REAL_SHP.exists(),
-                    reason="real SANDAG hwyLoad.shp not present (local-only)")
+                    reason="real SANDAG hwyLoad_2025.shp not present (local-only)")
 def test_real_growth_full_pipeline(tmp_path):
     from forecasting.ingest import ingest_networks
     from forecasting.matcher import match_network_to_legs

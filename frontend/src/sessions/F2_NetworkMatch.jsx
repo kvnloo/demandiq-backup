@@ -11,6 +11,8 @@ import {
   isExistingAnalysisDone,
 } from '../store/projectStore'
 import ForecastMatchMap from '../components/ForecastMatchMap'
+import { friendlyError, isMatchStale, pullKey } from '../lib/forecastRun'
+import { MODEL_PERIODS } from '../lib/forecastMethods'
 
 import '../styles/forms.css'
 import '../styles/forecasting.css'
@@ -68,7 +70,9 @@ export default function F2_NetworkMatch() {
   const canPull =
     networks.length > 0 &&
     networks.some((n) => n.role === 'base') &&
-    networks.every((n) => (fc.region === 'MTC' || n.path) && n.scenarioYear !== '' && n.scenarioYear != null)
+    networks.every((n) => n.scenarioYear !== '' && n.scenarioYear != null)
+  const stale = isMatchStale(fc)
+  const periods = MODEL_PERIODS[fc.region || 'SANDAG']
 
   const pull = async () => {
     setStatus('loading')
@@ -83,7 +87,7 @@ export default function F2_NetworkMatch() {
             num: it.num, lat: it.lat, lng: it.lng, approaches: it.approaches,
           })),
           networks: networks.map((n) => ({
-            role: n.role, scenario_year: Number(n.scenarioYear), path: n.path,
+            role: n.role, scenario_year: Number(n.scenarioYear),
           })),
         }),
       })
@@ -94,14 +98,12 @@ export default function F2_NetworkMatch() {
         throw new Error(detail)
       }
       const data = await res.json()
-      setForecasting({ layers: data.layers, matches: data.matches })
+      // A new pull replaces the matches, so earlier results no longer apply.
+      setForecasting({ layers: data.layers, matches: data.matches, pulledFor: pullKey(fc), results: null, run: null })
       setActiveNum(data.matches?.[0]?.intersection_num ?? null)
       setStatus('idle')
     } catch (err) {
-      setError({
-        kind: 'generic',
-        detail: `${err.message}. Make sure the backend is running under the combined venv (cd backend && .venv-forecasting/bin/python app.py).`,
-      })
+      setError({ kind: 'generic', detail: friendlyError(err) })
       setStatus('error')
     }
   }
@@ -158,7 +160,7 @@ export default function F2_NetworkMatch() {
         )}
         {!canPull && (
           <div className="di-fc-banner di-fc-banner--warn">
-            Set each network&apos;s role, model year, and file in{' '}
+            Pick the base and horizon model years in{' '}
             <button
               type="button"
               onClick={() => navigate('/forecast/setup')}
@@ -167,6 +169,12 @@ export default function F2_NetworkMatch() {
               step 1
             </button>{' '}
             before pulling.
+          </div>
+        )}
+        {stale && canPull && (
+          <div className="di-fc-banner di-fc-banner--warn" role="alert">
+            Step 1 changed since this pull (model years or region) — these matches are for the
+            old network. Re-pull before running the forecast.
           </div>
         )}
       </div>
@@ -241,6 +249,7 @@ export default function F2_NetworkMatch() {
                     <LegCard
                       key={d}
                       dir={d}
+                      periods={periods}
                       leg={activeMatch.legs?.[d]}
                       linksById={linksById}
                       onPick={(linkId) => updateLeg(activeMatch.intersection_num, d, {
@@ -281,8 +290,8 @@ export default function F2_NetworkMatch() {
               type="button"
               className="di-btn-amber"
               style={{ marginLeft: 'auto' }}
-              disabled={unresolved > 0}
-              title={unresolved > 0 ? 'Resolve every flagged leg first' : 'Run the forecast'}
+              disabled={unresolved > 0 || stale}
+              title={stale ? 'Re-pull first — step 1 changed' : unresolved > 0 ? 'Resolve every flagged leg first' : 'Run the forecast'}
               onClick={() => navigate('/forecast/run')}
             >
               Continue to Run Forecast →
@@ -294,14 +303,14 @@ export default function F2_NetworkMatch() {
   )
 }
 
-function fmtInbound(inbound) {
+function fmtInbound(inbound, periods) {
   if (!inbound) return null
-  const am = inbound.AM != null ? Math.round(inbound.AM) : '—'
-  const pm = inbound.PM != null ? Math.round(inbound.PM) : '—'
-  return `Base model inbound — AM ${am} · PM ${pm} (period veh)`
+  const f = (v) => (v != null ? Math.round(v).toLocaleString() : '—')
+  return `Base model, vehicles entering over the whole model period (not one hour) — ` +
+    `AM ${f(inbound.AM)}${periods ? ` (${periods.AM})` : ''} · PM ${f(inbound.PM)}${periods ? ` (${periods.PM})` : ''}`
 }
 
-function LegCard({ dir, leg, linksById, onPick, onDecide, onManual }) {
+function LegCard({ dir, leg, periods, linksById, onPick, onDecide, onManual }) {
   if (!leg) return null
   const status = leg.status
   const link = leg.link_id ? linksById.get(leg.link_id) : null
@@ -317,15 +326,17 @@ function LegCard({ dir, leg, linksById, onPick, onDecide, onManual }) {
         <div className="di-fc-leg__meta">
           <span className="di-fc-leg__name">{link?.name || leg.link_id}</span>
           {link?.functional_class ? ` · ${link.functional_class}` : ''}
-          {leg.bearing_deg != null && <> · {Math.round(leg.bearing_deg)}° (dev {Math.round(leg.deviation_deg ?? 0)}°)</>}
+          {leg.bearing_deg != null && <> · heading {Math.round(leg.bearing_deg)}°, {Math.round(leg.deviation_deg ?? 0)}° off this leg&apos;s direction</>}
           {leg.resolvedBy === 'engineer' && <> · confirmed</>}
-          {fmtInbound(leg.inbound) && <div className="di-fc-leg__inbound">{fmtInbound(leg.inbound)}</div>}
+          {fmtInbound(leg.inbound, periods) && <div className="di-fc-leg__inbound">{fmtInbound(leg.inbound, periods)}</div>}
         </div>
       )}
 
       {status === 'ambiguous' && (
         <div className="di-fc-leg__meta">
-          Two model links point at this leg — pick the correct one:
+          {(leg.candidates ?? []).length === 1
+            ? <>One model link is near this leg, but its angle is {Math.round(leg.deviation_deg ?? 0)}° off — confirm it&apos;s this leg:</>
+            : <>{(leg.candidates ?? []).length} model links could be this leg — pick the correct one:</>}
           <div className="di-fc-cands">
             {(leg.candidates ?? []).map((id) => {
               const nl = linksById.get(id)

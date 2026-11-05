@@ -204,13 +204,13 @@ def test_absent_leg():
 
 
 # ── Integration: real geometry, identity growth (base == horizon) ─────────────
-REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad.shp"
+REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad_2025.shp"
 _ALL12 = ["NBL", "NBT", "NBR", "SBL", "SBT", "SBR",
           "EBL", "EBT", "EBR", "WBL", "WBT", "WBR"]
 
 
 @pytest.mark.skipif(not REAL_SHP.exists(),
-                    reason="real SANDAG hwyLoad.shp not present (local-only)")
+                    reason="real SANDAG hwyLoad_2025.shp not present (local-only)")
 def test_real_identity_growth_returns_count():
     from forecasting.adapters.sandag import ingest_sandag
     lat, lng = 32.624067, -116.959736                         # DISCOVERY FALLS node

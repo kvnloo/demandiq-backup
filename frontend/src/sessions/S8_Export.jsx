@@ -15,6 +15,7 @@ import NewProjectDialog from '../components/NewProjectDialog'
 import { friendlyError } from '../lib/apiError'
 import { buildGridCell, intersectionGeo, stripVols } from '../lib/diagramPayload'
 import { convergenceLabel } from '../lib/convergenceLabel'
+import ForecastExportCard from './F4_ForecastExport'
 
 import '../styles/forms.css'
 import '../styles/map.css'        // .di-modal*, .di-banner, .di-btn-primary, .di-btn-secondary
@@ -326,6 +327,9 @@ export default function S8_Export() {
                 Download .demandiq.json
               </button>
             </div>
+
+            {/* Forecast workbook — only once a forecast has been run */}
+            {snap.forecasting?.results && <ForecastExportCard snap={snap} filename={filename} />}
 
             {/* Card 3 — Corridor line diagram (AM + PM, PRD-03) */}
             <div className="di-s8-card">
