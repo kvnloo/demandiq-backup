@@ -221,3 +221,8 @@
   .di-s1__layout { grid-template-columns: minmax(0, 1fr); }
   .di-s1__side { position: static; }
 }
+
+/* S1 "Open project file" row. The <label> wraps a hidden file input so the
+   whole button opens the picker. */
+.di-s1__open { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 18px; }
+.di-s1__open-btn { display: inline-flex; align-items: center; cursor: pointer; height: 36px; }

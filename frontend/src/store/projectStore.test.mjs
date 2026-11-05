@@ -21,6 +21,13 @@ import {
   redo,
   canUndo,
   canRedo,
+  saveProject,
+  setLastRun,
+  setCellValue,
+  applyBalancedRun,
+  isResultsStale,
+  isExistingAnalysisDone,
+  projectFileError,
 } from './projectStore.js'
 
 let passed = 0, failed = 0
@@ -266,6 +273,48 @@ ok(!canRedo(), 'history: new action clears the redo stack')
   // Idempotent: a second pass over already-normalized state changes nothing.
   const again = reconcileDependents(state)
   ok(again.changed === false, 'normalize: idempotent — already-clean state is unchanged')
+}
+
+// ── Stale results: any count / intersection edit after a run flags it ────
+{
+  const vol = (v) => ({ value: v, _source: 'manual' })
+  saveProject({
+    intersections: [
+      { id: 'a', num: 1, volumes: { AM: { EBT: vol(100) } } },
+      { id: 'b', num: 2, volumes: { AM: { EBT: vol(90) } } },
+    ],
+    links: [],
+  })
+  ok(!isResultsStale(), 'stale: nothing balanced → not stale')
+  applyBalancedRun({ AM: { 1: { EBT: 100 }, 2: { EBT: 100 } }, PM: {} })
+  setLastRun({ timestamp: 't', method: 'larger' })
+  ok(!isResultsStale() && isExistingAnalysisDone(), 'stale: fresh run → current')
+  setCellValue('a', 'AM', 'EBT', 500, 'manual')
+  ok(isResultsStale() && !isExistingAnalysisDone(), 'stale: edited count → stale, forecasting gate closes')
+  setCellValue('a', 'AM', 'EBT', 100, 'manual')
+  ok(!isResultsStale(), 'stale: count restored → matches the run again')
+  setIntersections([...getSnapshot().intersections, { id: 'c', num: 3 }])
+  ok(isResultsStale(), 'stale: added intersection → stale')
+  setLastRun({ timestamp: 't2', method: 'larger' })
+  ok(!isResultsStale(), 'stale: re-run clears it')
+  setIntersections(getSnapshot().intersections.filter((it) => it.id !== 'b'))
+  ok(getSnapshot().analysis.lastRun === null && isResultsStale(), 'stale: delete clears lastRun, leftover balanced is stale')
+  applyBalancedRun({ AM: { 1: { EBT: 105 } }, PM: {} })
+  ok(!getSnapshot().intersections.some((it) => it.id === 'c' && Object.keys(it.balanced ?? {}).length), 'applyBalancedRun replaces, never merges old numbers')
+  saveProject({
+    intersections: [{ id: 'a', num: 1, balanced: { AM: { EBT: 5 } } }],
+    analysis: { lastRun: { method: 'larger' } },
+  })
+  ok(!isResultsStale(), 'stale: legacy run without a fingerprint is trusted')
+}
+
+// ── Project file validation (Open project file) ──────────────────────────
+{
+  ok(projectFileError(null) && projectFileError([]) && projectFileError({ foo: 1 }), 'file: not a project → refused')
+  ok(projectFileError({ intersections: [{ id: 'a' }] }), 'file: intersection without num → refused')
+  ok(projectFileError({ intersections: [{ id: 'a', num: 1 }, { id: 'a', num: 2 }] }), 'file: duplicate ids → refused')
+  ok(projectFileError({ intersections: [{ id: 'a', num: 1, volumes: { AM: { EBT: { value: -5 } } } }] }), 'file: negative count → refused')
+  ok(projectFileError({ project: { name: 'X' }, intersections: [{ id: 'a', num: 1, volumes: { AM: { EBT: { value: 5 } } } }], links: [] }) === null, 'file: valid project → accepted')
 }
 
 console.log(`\n${'='.repeat(46)}\n  ${passed} passed, ${failed} failed`)
