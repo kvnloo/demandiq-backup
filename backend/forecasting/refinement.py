@@ -64,18 +64,18 @@ def _interp(m_base, m_future, year_base, year_future, year):
 
 
 def _nchrp765_pick(C, Mb, Mf, K, ratio, difference):
-    """NCHRP 765 Table 6-2 col. 12 (p. 110): choose by R = count / base assignment
-    (peak-hour units, so K·Mb). MRATIO leans to DIFF when the model grows a lot.
-    shortcut: the table's comparison symbols were lost in the PDF text; read as
-    MR<1: R<1 ratio, R>2 diff, else average; MR>1: R<0.5 mratio, R>2 diff, else
-    avg(mratio, diff) — confirm against the printed page if a reviewer asks."""
+    """NCHRP 765 Table 6-2 col. 12 (printed p. 110), checked against the page:
+      MR < 1: RATIO ≤ 1.0 → RATIO, RATIO ≥ 2.0 → DIFF, else RAf;
+      MR > 1: RATIO ≤ 0.5 → MRATIO, RATIO ≥ 2.0 → DIFF, else RAf (based on MRATIO);
+    where RATIO there is R = count / base assignment (peak-hour units, so K·Mb)
+    and RAf = average(MRATIO, DIFF). MR = 1 exactly: both branches agree."""
     R = C / (K * Mb)
     MR = Mf / Mb
     mratio = ratio if MR <= 1 else ((MR - 1) * difference + ratio) / MR
     lo = 1.0 if MR < 1 else NCHRP765_MIN_DIFF
-    if R < lo:
+    if R <= lo:
         return (mratio if MR > 1 else ratio), ("ratio (NCHRP 765, weighted)" if MR > 1 else "ratio"), R
-    if R > NCHRP765_MAX_RAT:
+    if R >= NCHRP765_MAX_RAT:
         return difference, "difference", R
     return 0.5 * (mratio + difference), "average of ratio and difference", R
 
@@ -115,10 +115,12 @@ def _refine_one(count_base, model_base, model_future, *,
         yb, yf, yc, yh = years
         Mb = _interp(Mb_raw, Mf_raw, yb, yf, yc)
         Mf = _interp(Mb_raw, Mf_raw, yb, yf, yh)
-        for label, val in (("count-year", Mb), ("horizon-year", Mf)):
+        for label, val, yr in (("count-year", Mb, yc), ("horizon-year", Mf, yh)):
             if val < 0:   # a falling model trend run past its years can cross zero
                 flags.append({"code": "REFINE-EXTRAPOLATED-BELOW-ZERO",
-                              "message": f"{label} model volume extrapolates to {val:.0f} — set to 0."})
+                              "message": (f"the model's falling trend, extended to {yr}, goes below zero "
+                                          f"({val:.0f} veh); DemandIQ used 0 for the {label} model volume — "
+                                          "this leg's forecast is unreliable: use a nearer horizon or another method.")})
         Mb, Mf = max(Mb, 0.0), max(Mf, 0.0)
     K = peak_hour_factor
     out = {"count_base": C, "model_base_raw": Mb_raw, "model_future_raw": Mf_raw,
@@ -357,12 +359,19 @@ def refine_corridor(
                     "message": (f"model lanes change {lb}→{lh} — the base-year count/model "
                                 "relationship may not hold (NCHRP 255 p. 54); review this leg."),
                 })
-            if years is not None and (years[3] > max(years[0], years[1]) + 5 or years[2] < min(years[0], years[1]) - 5):
-                leg_flags.append({
-                    "code": "REFINE-EXTRAPOLATED",
-                    "message": (f"years {years[2]}→{years[3]} reach more than 5 years past the model's "
-                                f"{years[0]}–{years[1]} runs — volumes are extrapolated (ODOT APM §6.2)."),
-                })
+            if years is not None:
+                lo_y, hi_y = min(years[0], years[1]), max(years[0], years[1])
+                why = []
+                if years[3] > hi_y + 5:
+                    why.append(f"Model only goes to {hi_y}; {years[3]} is extrapolated")
+                if years[2] < lo_y - 5:
+                    why.append(f"Model starts at {lo_y}; the {years[2]} count year is extrapolated")
+                if why:
+                    leg_flags.append({
+                        "code": "REFINE-EXTRAPOLATED",
+                        "message": ("; ".join(why) + " (more than 5 years past the model runs, "
+                                    "ODOT APM §6.2) — treat these volumes as less certain."),
+                    })
             approaches[d] = {
                 "status": "bound", "link_id": link_id,
                 "inbound": _refine_one(c_in, mb_in, mf_in, **kw),
