@@ -864,7 +864,8 @@ def source_outlier_flags(raw_volumes, period=None,
          is structural, not an outlier).
       2. Skip if fewer than min_intersections samples (stats noisy on tiny
          corridors).
-      3. Compute corridor median + MAD-based robust σ. Flag any intersection
+      3. Compute corridor median + MAD-based robust σ (floored at 10% of the
+         median, so a tight sample can't make normal variation look extreme). Flag any intersection
          whose |total - median| exceeds BOTH sigma_threshold × robust σ AND
          abs_floor_veh. The absolute floor prevents low-volume corridors
          (median ≈ 15, MAD ≈ 1, robust σ ≈ 1.5 veh) from false-positiving on
@@ -905,11 +906,9 @@ def source_outlier_flags(raw_volumes, period=None,
         vals = list(totals.values())
         med = _median(vals)
         mad = _median([abs(v - med) for v in vals])
-        # MAD == 0 → most of the values are identical; we have no scale to
-        # measure deviation against. Skip rather than fire arbitrary alarms.
-        if mad <= 0:
-            continue
-        robust_sigma = MAD_TO_SIGMA * mad
+        # Floor σ at 10% of the median: ordinary count-to-count variation at a
+        # corridor (±10%) must not read as many σ when the sample is tight.
+        robust_sigma = max(MAD_TO_SIGMA * mad, 0.10 * med)
 
         for int_num in sorted(totals.keys()):
             total = totals[int_num]
@@ -1019,8 +1018,9 @@ def balance_nchrp(
                      resolution per S5 setting.
         coords:      { int_num: {'lat','lng'} } — for geographic leg ordering.
         round_to_5:  round balanced up to next multiple of 5.
-        tol:         convergence tolerance (max cell delta between iters,
-                     vehicles).
+        tol:         convergence tolerance in vehicles: an intersection is
+                     'converged' only when its final residual (max leg-total
+                     miss after IPF) is <= tol.
         max_iter:    IPF iteration cap per intersection.
 
     Returns:
@@ -1129,17 +1129,18 @@ def balance_nchrp(
     # via compute_link_conservation; engineers see exactly where adjacent
     # counts disagree.
     for int_num, M in matrices.items():
-        # Use 0.01 veh tolerance — far tighter than the default 0.5 — because
-        # Level 1 already gave us balanced targets. The only sources of
-        # non-zero residual are (a) IPF cell-stability tolerance and
-        # (b) structural infeasibility from thin matrices.
+        # Iterate to at most 0.01 veh cell stability (tighter if the caller
+        # asked for less) — Level 1 already gave us balanced targets. The only
+        # sources of non-zero residual are (a) IPF cell-stability tolerance and
+        # (b) structural infeasibility from thin matrices. `tol` (vehicles) is
+        # the caller's bar: converged only if the leftover residual meets it.
         M_out, conv, iters_used, final_residual = furness_intersection(
             M, row_targets_per_int[int_num], col_targets_per_int[int_num],
-            presents[int_num], tol=0.01, max_iter=max(max_iter, 2000),
+            presents[int_num], tol=min(tol, 0.01), max_iter=max(max_iter, 2000),
         )
         matrices[int_num] = M_out
         iterations[int_num] = iters_used
-        converged_map[int_num] = conv
+        converged_map[int_num] = conv and final_residual <= tol
         final_residual_map[int_num] = final_residual
 
     # Build balanced dict from final matrices (skip pass-through intersections)
@@ -1160,8 +1161,9 @@ def balance_nchrp(
                 'check': 'NCHRP-CONV',
                 'int': int_num,
                 'message': (
-                    f"Int {int_num}: inner IPF did not stabilize in {max_iter} iter on "
-                    f"last outer pass (max cell delta still > {tol} veh)."
+                    f"Int {int_num}: balancing stopped with a leftover mismatch of "
+                    f"{final_residual_map[int_num]:.2f} veh, above the {tol:g} veh "
+                    f"tolerance. Check this intersection's counts."
                 ),
             })
 
