@@ -15,7 +15,11 @@ import threading
 import time
 import http.client
 
+import tempfile
+
 os.environ.setdefault("ANTHROPIC_API_KEY", "placeholder-not-used-by-tested-endpoints")
+# Export routes record captures; keep them out of the repo's backend/captures.db.
+os.environ.setdefault("CAPTURE_DB_PATH", os.path.join(tempfile.mkdtemp(), "captures.db"))
 
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
