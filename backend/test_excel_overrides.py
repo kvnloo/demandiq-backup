@@ -1,7 +1,7 @@
 """PRD-02 — Excel export honors engineer overrides + 3-tab schema.
 
 Verifies that project_state.balancing.overrides is reflected in:
-  1. Combined View — balanced cell carries "*" suffix on overridden movements.
+  1. Combined View — overridden balanced cell stays numeric, with fill + note.
   2. Raw Movements — the dedicated "AM Override" / "PM Override" column
      carries the engineer value.
 
@@ -55,7 +55,7 @@ def test_export_honors_overrides():
     # ── Sheet schema ───────────────────────────────────────────────────
     assert wb.sheetnames == ['Provenance', 'Combined View', 'Raw Movements'], wb.sheetnames
 
-    # ── Combined View carries the override "*" marker on EBT balanced ──
+    # ── Combined View: override stays a number, marked by a cell note ──
     ws = wb['Combined View']
     ebt_row = None
     for r in range(2, ws.max_row + 1):
@@ -64,7 +64,8 @@ def test_export_honors_overrides():
             break
     assert ebt_row, 'EBT row not found in Combined View'
     am_balanced = ws.cell(row=ebt_row, column=3).value
-    assert am_balanced == '950*', f"expected '950*' in EBT balanced; got {am_balanced!r}"
+    assert am_balanced == 950, f"expected numeric 950 in EBT balanced; got {am_balanced!r}"
+    assert ws.cell(row=ebt_row, column=3).comment is not None, "override note missing"
     print(f"  Combined View EBT AM balanced shows override marker: {am_balanced!r}")
 
     # ── Raw Movements carries the override in the AM Override column ───
@@ -126,7 +127,7 @@ def test_export_clean_when_no_overrides():
 
 def test_combined_view_sheet():
     """Stage 10.2 — Combined View sheet: 7 columns, Δ = Bal − Raw, and
-    override balanced cells carry the "*" marker. Preserved unchanged."""
+    override balanced cells stay numeric and carry an override note."""
     project_state = {
         'project': {'name': 'Test', 'analysisPeriods': ['AM', 'PM']},
         'intersections': [{
@@ -179,7 +180,7 @@ def test_combined_view_sheet():
     print(f"  EBL row: raw={am_raw} bal={am_bal} Δ={am_delta}")
 
     ebt_am_bal = ws.cell(row=ebt_row, column=3).value
-    assert ebt_am_bal == '1000*', f"expected '1000*' override marker; got {ebt_am_bal!r}"
+    assert ebt_am_bal == 1000, f"expected numeric 1000 override; got {ebt_am_bal!r}"
     print(f"  EBT AM override marker: {ebt_am_bal!r}")
 
     totals = [ws.cell(row=r, column=1).value for r in range(2, ws.max_row + 1)]
@@ -233,9 +234,9 @@ def test_provenance_tab_structure():
     ws = wb['Provenance']
 
     # Build a key→value map of the header block (cols A,B; first 10 rows)
-    header = {ws.cell(row=r, column=1).value: ws.cell(row=r, column=2).value for r in range(1, 11)}
+    header = {ws.cell(row=r, column=1).value: ws.cell(row=r, column=2).value for r in range(1, 14)}
     assert header['Project']        == 'PRD-02 fixture',           header['Project']
-    assert header['Run at']         == '2026-05-29T19:00:00.000Z', header['Run at']
+    assert header['Run at']         == 'May 29, 2026 12:00 PM PDT', header['Run at']
     # Method/Direction/Peak come from lastRun.config (NOT current balancing)
     assert header['Method']         == 'Average',                  header['Method']
     assert header['Direction']      == 'EB/WB',                    header['Direction']
@@ -424,7 +425,7 @@ def test_provenance_legacy_run_degrades_gracefully():
     wb = load_workbook(io.BytesIO(build_workbook(project_state)), data_only=True)
     assert wb.sheetnames == ['Provenance', 'Combined View', 'Raw Movements'], wb.sheetnames
     ws = wb['Provenance']
-    header = {ws.cell(row=r, column=1).value: ws.cell(row=r, column=2).value for r in range(1, 11)}
+    header = {ws.cell(row=r, column=1).value: ws.cell(row=r, column=2).value for r in range(1, 14)}
     # Missing fields fall back to '—'
     assert header['Method'] == '—', header['Method']
     assert header['Tolerance'] == '—', header['Tolerance']

@@ -220,7 +220,7 @@ def test_override_propagation():
     ovr_val = raw_ebl if raw_ebl != bal_ebl else bal_ebl + 50
     overrides = {'AM': {'4': {'EBL': ovr_val}}, 'PM': {}}
 
-    # (a) Excel Combined View cell carries the "*" marker + override value
+    # (a) Excel Combined View cell holds the numeric override value + a note
     state = build_project_state(RAW, AM, PM, overrides=overrides)
     wb = load_workbook(io.BytesIO(build_workbook(state)), data_only=True)
     ws = wb['Combined View']
@@ -235,9 +235,11 @@ def test_override_propagation():
         if isinstance(first, str) and first.startswith('Int ') and not first.startswith('Int 4 '):
             in_int4 = False
         if in_int4 and first == 'EBL':
+            ebl_note = ws.cell(row=r, column=3).comment
             ebl_cell = ws.cell(row=r, column=3).value   # AM Balanced
             break
-    assert ebl_cell == f"{ovr_val}*", f"expected '{ovr_val}*' in Int4 EBL AM cell; got {ebl_cell!r}"
+    assert ebl_cell == ovr_val and ebl_note is not None, \
+        f"expected numeric {ovr_val} with an override note in Int4 EBL AM cell; got {ebl_cell!r}"
 
     # (b) The EB link into Int 4 now shows a nonzero conservation delta
     balanced_ovr = {n: dict(v) for n, v in AM['balanced'].items()}
@@ -248,7 +250,7 @@ def test_override_propagation():
     assert abs(entry['delta']) > 0, \
         f"override should break conservation on (3→4,EB); delta={entry['delta']}"
     print(f"  7. OVERRIDE PROPAGATION: PASS "
-          f"(Int4 EBL→{ovr_val}* in Excel; (3→4,EB) delta now {entry['delta']:+.0f})")
+          f"(Int4 EBL→{ovr_val} (override note) in Excel; (3→4,EB) delta now {entry['delta']:+.0f})")
 
 
 if __name__ == '__main__':
