@@ -16,13 +16,13 @@ DemandIQ — traffic count extraction agent
   the server must be started from an environment that actually has it.
 
 ```bash
-pip install -r backend/requirements.txt
+pip install -r backend/requirements-dev.txt   # app + test tools (pytest, hypothesis)
 cd frontend && npm install
 ```
 
-The forecasting geo stack (`backend/requirements-forecasting.txt`) is optional —
-its imports are lazy, so the app runs without it and only
-`/forecast/ingest-match` returns 503.
+The forecasting geo stack (`backend/requirements-forecasting.txt`) is optional
+locally — its imports are lazy, so the app runs without it and only
+`/forecast/ingest-match` returns 503. The Docker image installs it.
 
 ## Running locally
 
