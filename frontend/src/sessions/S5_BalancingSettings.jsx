@@ -9,8 +9,10 @@ import {
   setBalancing,
   setLinkBalanceMode,
   ensureBalancingDefaults,
+  resolveLinkMode,
 } from '../store/projectStore'
 import { haversineMi } from '../lib/geo'
+import { intLabel } from '../lib/labels'
 
 import '../styles/forms.css'
 import '../styles/map.css' // .di-banner, .di-btn-primary, .di-btn-secondary
@@ -87,7 +89,6 @@ export default function S5_BalancingSettings() {
   const pm         = balancing.pmWindow ?? { start: '16:00', end: '18:00' }
   const convStored = balancing.convergenceThreshold ?? 0.01
   const maxIter    = balancing.maxIterations ?? 500
-  const linkModes  = balancing.linkBalanceModes ?? {}
 
   // ── Validation ──────────────────────────────────────────────────────
   const errors = {
@@ -103,23 +104,20 @@ export default function S5_BalancingSettings() {
   }
   const isValid = Object.values(errors).every((e) => e === null)
 
-  // ── Pairs (S2-sorted) for the per-link table ───────────────────────
-  const pairs = []
-  for (let i = 0; i < intersections.length - 1; i++) {
-    const a = intersections[i]
-    const b = intersections[i + 1]
-    pairs.push({
-      id: `${a.id}__${b.id}`,
-      a, b,
-      distance: haversineMi(a, b),
+  // ── Per-link table: the corridor's actual links (S2), not neighbours in
+  // list order — these are exactly the links S6 sends, with the same mode.
+  const byId = new Map(intersections.map((it) => [it.id, it]))
+  const pairs = (snap.links ?? [])
+    .filter((L) => byId.has(L.fromId) && byId.has(L.toId))
+    .map((L) => {
+      const a = byId.get(L.fromId), b = byId.get(L.toId)
+      return { id: `${a.id}__${b.id}`, a, b, distance: haversineMi(a, b), mode: resolveLinkMode(a.id, b.id) }
     })
-  }
 
   // ── Mode-count breakdown for summary ───────────────────────────────
   const modeCounts = pairs.reduce(
     (acc, p) => {
-      const m = (linkModes[p.id]?.mode) ?? 'Full'
-      acc[m] = (acc[m] ?? 0) + 1
+      acc[p.mode] = (acc[p.mode] ?? 0) + 1
       return acc
     },
     { Full: 0, 'Land Use': 0, None: 0 }
@@ -139,7 +137,7 @@ export default function S5_BalancingSettings() {
             <div className="di-s5-row">
               <div className="di-s5-row__label">
                 Balance volumes
-                <div className="di-s5-row__sub">When off, volumes pass through to S6 unchanged.</div>
+                <div className="di-s5-row__sub">When off, your raw counts are used unchanged and every result is labelled “not balanced”.</div>
               </div>
               <ToggleSwitch checked={enabled} onChange={(v) => setBalancing({ enabled: v })} />
             </div>
@@ -158,9 +156,9 @@ export default function S5_BalancingSettings() {
                   </button>
                 </span>
                 <div className="di-s5-row__sub">
-                  Adjacent intersection counts on the same segment disagree (different days /
-                  crews). NCHRP 255/765 requires resolving these into one value per link
-                  before balancing turning movements.
+                  Neighbouring intersections often count different volumes on the street
+                  between them (different days or crews). Balancing first settles each link on
+                  one target volume, then fits the turning movements to it.
                 </div>
               </div>
               <RadioGroup
@@ -215,7 +213,7 @@ export default function S5_BalancingSettings() {
               </div>
               {errors.amEnd && <div className="di-s5-err">{errors.amEnd}</div>}
               <div className="di-s5-stack__sub">
-                Peak hour search window. Furness picks the highest 4 consecutive 15-min intervals within this range.
+                For your records and the report. Balancing uses the peak-hour counts you entered; these windows don&apos;t change the numbers.
               </div>
             </div>
 
@@ -239,14 +237,18 @@ export default function S5_BalancingSettings() {
               {errors.pmStart && <div className="di-s5-err">{errors.pmStart}</div>}
               {errors.pmEnd && <div className="di-s5-err">{errors.pmEnd}</div>}
               <div className="di-s5-stack__sub">
-                Peak hour search window. Furness picks the highest 4 consecutive 15-min intervals within this range.
+                For your records and the report. Balancing uses the peak-hour counts you entered; these windows don&apos;t change the numbers.
               </div>
             </div>
           </section>
 
-          {/* Section C — Furness engine */}
+          {/* Section C — iteration controls */}
           <section className="di-s5-section">
-            <h3 className="di-s5-section__title">Furness engine parameters</h3>
+            <h3 className="di-s5-section__title">When to stop balancing</h3>
+            <div className="di-s5-stack__sub" style={{ marginBottom: 8 }}>
+              Each intersection is adjusted in repeated passes until its volumes stop changing
+              (convergence threshold) or the pass limit is reached.
+            </div>
 
             <div className="di-s5-row">
               <div className="di-s5-row__label">Convergence threshold</div>
@@ -268,7 +270,7 @@ export default function S5_BalancingSettings() {
             </div>
 
             <div className="di-s5-row">
-              <div className="di-s5-row__label">Max iterations</div>
+              <div className="di-s5-row__label">Max passes (iterations)</div>
               <div>
                 <NumWithSuffix
                   value={maxIter}
@@ -292,7 +294,7 @@ export default function S5_BalancingSettings() {
             <div className="di-s5-locked">
               <div className="di-s5-locked__row">
                 <Lock size={12} className="di-s5-locked__icon" />
-                <span><b>Rounding:</b> nearest 5, minimum 5 for non-zero movements</span>
+                <span><b>Rounding:</b> balanced volumes are rounded up to the next multiple of 5; a counted 0 stays 0</span>
               </div>
               <div className="di-s5-locked__row">
                 <Lock size={12} className="di-s5-locked__icon" />
@@ -305,7 +307,7 @@ export default function S5_BalancingSettings() {
           <section className="di-s5-section">
             {pairs.length === 0 ? (
               <div className="di-s5-disc__note" style={{ padding: '12px 0' }}>
-                Per-link settings require 2+ intersections.
+                No links between intersections, so there are no per-link settings. Link intersections on the map (step 2) to balance them as a corridor.
               </div>
             ) : (
               <div className={`di-s5-disc${advancedOpen ? ' di-s5-disc--open' : ''}`}>
@@ -320,50 +322,31 @@ export default function S5_BalancingSettings() {
                 </button>
                 {advancedOpen && (
                   <div className="di-s5-disc__body">
-                    <div className="di-s5-link__head">
+                    <div className="di-s5-link__head di-s5-link--2col">
                       <span>Link</span>
                       <span>Mode</span>
-                      <span>Threshold</span>
                     </div>
-                    {pairs.map((p) => {
-                      const cur = linkModes[p.id] ?? { mode: 'Full', threshold: 0 }
-                      const isLandUse = cur.mode === 'Land Use'
-                      return (
-                        <div key={p.id} className="di-s5-link">
-                          <div className="di-s5-link__label">
-                            Int {String(p.a.num).padStart(2, '0')} → Int {String(p.b.num).padStart(2, '0')}
-                            <span className="di-s5-link__dist">({p.distance.toFixed(1)} mi)</span>
-                          </div>
-                          <select
-                            className="di-select--sm"
-                            value={cur.mode}
-                            disabled={!enabled}
-                            onChange={(e) => setLinkBalanceMode(p.id, e.target.value, cur.threshold)}
-                          >
-                            {LINK_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
-                          </select>
-                          <div className={`di-s5-link__thresh${!isLandUse ? ' di-s5-link__thresh--dis' : ''}`}>
-                            <input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={cur.threshold ?? 0}
-                              disabled={!isLandUse || !enabled}
-                              onChange={(e) =>
-                                setLinkBalanceMode(
-                                  p.id,
-                                  cur.mode,
-                                  e.target.value === '' ? 0 : Math.max(0, Number(e.target.value))
-                                )
-                              }
-                            />
-                            <span className="di-s5-link__thresh-suffix">veh</span>
-                          </div>
+                    {pairs.map((p) => (
+                      <div key={p.id} className="di-s5-link di-s5-link--2col">
+                        <div className="di-s5-link__label">
+                          {intLabel(p.a)} → {intLabel(p.b)}
+                          <span className="di-s5-link__dist">({p.distance.toFixed(1)} mi)</span>
                         </div>
-                      )
-                    })}
+                        <select
+                          className="di-select--sm"
+                          value={p.mode}
+                          disabled={!enabled}
+                          onChange={(e) => setLinkBalanceMode(p.id, e.target.value, 0)}
+                        >
+                          {LINK_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                    ))}
                     <div className="di-s5-stack__sub" style={{ marginTop: 10 }}>
-                      Land Use mode allows the threshold gap between paired volumes after balancing.
+                      <b>Full</b>: the two counts on the link are made to agree. <b>Land Use</b>: both
+                      intersections are balanced, but a gap between them is allowed (a driveway or
+                      development between them adds or removes traffic) and reported. <b>None</b>: the
+                      link is ignored.
                     </div>
                   </div>
                 )}
@@ -376,9 +359,10 @@ export default function S5_BalancingSettings() {
         <aside className="di-s5__summary">
           <h3 className="di-s5-sum__title">Configuration</h3>
           <p className="di-s5-sum__sub">
-            Method: NCHRP 255/765 turning-movement refinement. Per-intersection
-            Fratar factoring against link-resolved targets. Balanced volumes are
-            floored at raw collected counts and rounded up to the next 5.
+            Method: NCHRP 255/765 turning-movement balancing. Each link gets one target
+            volume, then each intersection&apos;s movements are scaled to meet its targets
+            and rounded up to the next 5. Individual movements can still end up slightly
+            below their raw count — Run Analysis lists every drop for review.
           </p>
           {!enabled ? (
             <div className="di-s5-sum--off">Balancing disabled — values will pass through.</div>
@@ -466,8 +450,8 @@ function LinkResolutionInfoModal({ onClose }) {
           <p>
             Adjacent intersection counts on the same segment often disagree because counts
             are taken on different days, by different crews, or for different durations.
-            NCHRP 255 / 765 requires you to resolve these disagreements before balancing
-            intersection turning movements.
+            The standard method (NCHRP Reports 255 and 765) settles each disagreement on one
+            value before balancing the turning movements.
           </p>
           <p>
             <strong>Example:</strong> On a segment between Int 1 and Int 2, Int 1's
@@ -486,14 +470,16 @@ function LinkResolutionInfoModal({ onClose }) {
           <h3 className="di-link-info__heading">Average</h3>
           <p className="di-link-info__formula">Result: (278 + 164) / 2 = 221</p>
           <p>
-            Treats both counts as equally reliable. Defensible in reports as standard
-            NCHRP practice. Use when both counts are equal quality.
+            Treats both counts as equally reliable — the usual practice in NCHRP reports.
+            Use when both counts are equal quality.
           </p>
           <hr className="di-link-info__rule" />
           <p className="di-link-info__footnote">
-            The <strong>balanced ≥ raw</strong> floor applies regardless of which option
-            you choose — no turning movement will drop below its collected value after
-            balancing. Final volumes are rounded up to the next multiple of 5.
+            Either way, the <strong>link targets</strong> use the larger (or average) of the
+            two counts. Individual turning movements can still drop a little below their
+            collected value when an intersection is re-balanced to meet its targets — Run
+            Analysis and Review movements list every drop. Final volumes are rounded up to
+            the next multiple of 5.
           </p>
         </div>
       </div>
