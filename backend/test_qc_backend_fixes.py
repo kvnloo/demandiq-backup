@@ -348,7 +348,8 @@ def test_health_stays_fast_during_heavy_request():
             assert c.getresponse().status == 200
             worst = max(worst, time.time() - t)
             time.sleep(0.1)
-        assert worst < 0.5, f"/health took {worst:.2f}s during a heavy render"
+        # the render holds the GIL, so a busy laptop lands near 0.5 s; the bug was 9-21 s
+        assert worst < 1.5, f"/health took {worst:.2f}s during a heavy render"
     finally:
         server.should_exit = True
 
