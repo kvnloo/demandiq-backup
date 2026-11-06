@@ -32,6 +32,7 @@ export default function TopBar() {
 
   return (
     <header
+      className="di-topbar"
       style={{
         height: 56,
         flexShrink: 0,
@@ -44,6 +45,8 @@ export default function TopBar() {
       }}
     >
       <span
+        className="di-topbar__project"
+        title={display}
         style={{
           flex: 1,
           minWidth: 0,
@@ -59,8 +62,8 @@ export default function TopBar() {
 
       <button
         type="button"
-        className="di-btn-secondary"
-        style={{ height: 32, padding: '0 14px', fontSize: 13, flexShrink: 0 }}
+        className="di-btn-secondary di-topbar__new"
+        style={{ height: 44, padding: '0 14px', fontSize: 13, flexShrink: 0 }}
         onClick={() => setConfirmOpen(true)}
       >
         New project

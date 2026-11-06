@@ -15,15 +15,16 @@ import F1_HorizonNetwork from './sessions/F1_HorizonNetwork'
 import F2_NetworkMatch from './sessions/F2_NetworkMatch'
 import F3_RunForecast from './sessions/F3_RunForecast'
 import F4_FutureResults from './sessions/F4_FutureResults'
+import './styles/phoneGates.css'
 
 export default function App() {
   return (
     <BrowserRouter>
-      <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-base)' }}>
+      <div className="di-app-shell" style={{ display: 'flex', height: '100vh', background: 'var(--bg-base)' }}>
         <Sidebar />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div className="di-app-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <TopBar />
-          <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+          <main className="di-app-main" style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
             <Routes>
               <Route path="/" element={<S1_ProjectSetup />} />
               <Route path="/map" element={<S2_MapIntersection />} />

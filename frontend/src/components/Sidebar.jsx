@@ -48,6 +48,8 @@ export default function Sidebar() {
 
   return (
     <aside
+      className="di-sidebar"
+      aria-label="Project stages"
       style={{
         width: 240,
         flexShrink: 0,
@@ -60,6 +62,7 @@ export default function Sidebar() {
       }}
     >
       <div
+        className="di-sidebar__brand"
         style={{
           fontFamily: 'var(--font-display)',
           fontSize: 18,
@@ -91,6 +94,7 @@ export default function Sidebar() {
 
       {/* ── Forecasting (Method 1 / NCHRP 765) — amber-anchored, gated ──────── */}
       <div
+        className="di-sidebar__forecast"
         style={{
           margin: '18px 12px 6px',
           paddingTop: 14,
@@ -151,6 +155,7 @@ export default function Sidebar() {
       <button
         type="button"
         onClick={() => exportDiagnostics()}
+        className="di-sidebar__diagnostics"
         title="Download a JSON snapshot of project state for debugging (no credentials)"
         style={{
           marginTop: 'auto',

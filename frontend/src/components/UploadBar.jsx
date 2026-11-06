@@ -143,7 +143,7 @@ export default function UploadBar({
               <button
                 type="button"
                 className="di-up-file__remove"
-                aria-label="Remove file"
+                aria-label={'Remove ' + f.name}
                 onClick={() => onRemove(f.id)}
               >
                 <X size={12} />

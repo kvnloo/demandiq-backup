@@ -52,9 +52,14 @@ export default function S6_ReviewMovements() {
         <IntersectionDiagram intersection={intersection} period={period} />
         <div className="di-rm__rail">
           <ChangelogCard lastRun={lastRun} intNum={intNum} period={period} />
-          <ReconciliationCard lastRun={lastRun} intNum={intNum} period={period} />
+          <ReconciliationCard lastRun={lastRun} intNum={intNum} period={period}
+                               onAdjustBalancing={() => navigate('/balancing')}
+                               onReviewVerdict={() => navigate('/analysis')} />
           <FlagIndicator lastRun={lastRun} intNum={intNum} period={period}
-                         onGoToVerdict={() => navigate('/analysis')} />
+                         onGoToVerdict={() => navigate('/analysis')}
+                          onEditCounts={() => navigate('/volumes')}
+                          onReviewMap={() => navigate('/map')}
+                          onAdjustBalancing={() => navigate('/balancing')} />
         </div>
       </div>
 

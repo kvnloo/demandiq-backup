@@ -17,7 +17,7 @@ export function activeMovements(approach) {
 }
 
 // One AM-or-PM volume input cell (number, with source colouring + AI badge).
-function VolCell({ cell, onChange }) {
+function VolCell({ cell, onChange, label }) {
   const source = cell?._source
   const value = cell?.value
   const cls =
@@ -30,6 +30,7 @@ function VolCell({ cell, onChange }) {
         type="number"
         min="0"
         className="di-vol-input"
+        aria-label={label}
         value={value ?? ''}
         onChange={(e) => {
           const raw = e.target.value
@@ -40,7 +41,7 @@ function VolCell({ cell, onChange }) {
   )
 }
 
-function ScalarCell({ value, step, onChange }) {
+function ScalarCell({ value, step, onChange, label }) {
   return (
     <td className="di-vol-td di-vol-td--cell">
       <input
@@ -48,6 +49,7 @@ function ScalarCell({ value, step, onChange }) {
         step={step}
         min="0"
         className="di-vol-input"
+        aria-label={label}
         value={value ?? ''}
         onChange={(e) => {
           const raw = e.target.value
@@ -109,10 +111,12 @@ export default function VolumeGrid({ intersections }) {
                           <td className="di-vol-td di-vol-td--mvt">{code}</td>
                           <VolCell
                             cell={it.volumes?.AM?.[code]}
+                             label={it.num + ' ' + code + ' AM volume'}
                             onChange={(v) => setCellValue(it.id, 'AM', code, v, 'manual')}
                           />
                           <VolCell
                             cell={it.volumes?.PM?.[code]}
+                             label={it.num + ' ' + code + ' PM volume'}
                             onChange={(v) => setCellValue(it.id, 'PM', code, v, 'manual')}
                           />
                         </tr>
@@ -122,13 +126,13 @@ export default function VolumeGrid({ intersections }) {
                 })}
                 <tr className="di-vol-scalar-row">
                   <td className="di-vol-td di-vol-td--mvt">PHF</td>
-                  <ScalarCell value={it.phf?.AM} step="0.001" onChange={(v) => setPhf(it.id, 'AM', v)} />
-                  <ScalarCell value={it.phf?.PM} step="0.001" onChange={(v) => setPhf(it.id, 'PM', v)} />
+                  <ScalarCell label={it.num + " AM PHF"} value={it.phf?.AM} step="0.001" onChange={(v) => setPhf(it.id, 'AM', v)} />
+                  <ScalarCell label={it.num + " PM PHF"} value={it.phf?.PM} step="0.001" onChange={(v) => setPhf(it.id, 'PM', v)} />
                 </tr>
                 <tr className="di-vol-scalar-row">
                   <td className="di-vol-td di-vol-td--mvt">HV %</td>
-                  <ScalarCell value={it.hvPct?.AM} step="0.1" onChange={(v) => setHvPct(it.id, 'AM', v)} />
-                  <ScalarCell value={it.hvPct?.PM} step="0.1" onChange={(v) => setHvPct(it.id, 'PM', v)} />
+                  <ScalarCell label={it.num + " AM heavy vehicle percentage"} value={it.hvPct?.AM} step="0.1" onChange={(v) => setHvPct(it.id, 'AM', v)} />
+                  <ScalarCell label={it.num + " PM heavy vehicle percentage"} value={it.hvPct?.PM} step="0.1" onChange={(v) => setHvPct(it.id, 'PM', v)} />
                 </tr>
               </tbody>
             </table>

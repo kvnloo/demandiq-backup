@@ -1,18 +1,25 @@
-// frontend/src/components/reviewMovements/ReconciliationCard.jsx
 import { reconciliationVerdict, statusClass } from '../../lib/reviewMovements'
 
-// Single verdict line. Per ADR 0001: NO twin in/out totals (they are always
-// equal — a check that cannot fail). The verdict is read from the solver.
-export default function ReconciliationCard({ lastRun, intNum, period }) {
+// Solver verdict stays read-only; edits use existing settings/analysis screens.
+export default function ReconciliationCard({
+  lastRun, intNum, period, onAdjustBalancing, onReviewVerdict,
+}) {
   const v = reconciliationVerdict(lastRun, intNum, period)
   const glyph = v.status === 'green' ? '✓' : '⚠'
+  const needsSettings = v.state === 'did-not-converge'
   return (
     <div className="di-rm-card">
       <div className="di-rm-card__label">Flow reconciles</div>
-      <div className={`di-rm-status ${statusClass(v.status)}`}>
+      <div className={'di-rm-status ' + statusClass(v.status)}>
         <span aria-hidden="true">{glyph}</span>
         <span>{v.label}</span>
       </div>
+      {v.status !== 'green' && (
+        <button type="button" className="di-btn-ghost di-rm-fix"
+          onClick={needsSettings ? onAdjustBalancing : onReviewVerdict}>
+          {needsSettings ? 'Adjust balancing' : 'Review analysis'}
+        </button>
+      )}
     </div>
   )
 }
