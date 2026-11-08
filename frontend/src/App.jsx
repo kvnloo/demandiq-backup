@@ -19,11 +19,11 @@ import F4_FutureResults from './sessions/F4_FutureResults'
 export default function App() {
   return (
     <BrowserRouter>
-      <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-base)' }}>
-        <Sidebar />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <TopBar />
-          <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+      <div className="di-shell">
+        <TopBar />
+        <div className="di-app">
+          <Sidebar />
+          <main className="di-stage">
             <Routes>
               <Route path="/" element={<S1_ProjectSetup />} />
               <Route path="/map" element={<S2_MapIntersection />} />

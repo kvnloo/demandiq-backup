@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import { Plus, Trash2 } from 'lucide-react'
 
 import { getForecasting, setForecasting, isExistingAnalysisDone } from '../store/projectStore'
@@ -29,12 +30,6 @@ export default function F1_HorizonNetwork() {
   const [form, setForm] = useState(() => ({ ...DEFAULTS(), ...(getForecasting() ?? {}) }))
 
   // Self-guard: forecasting grows the existing balanced TMCs, so it's unreachable
-  // until they exist. Mirrors S3/S8's empty-state redirect.
-  useEffect(() => {
-    if (gateOpen) return
-    const t = setTimeout(() => navigate('/results'), 1200)
-    return () => clearTimeout(t)
-  }, [gateOpen, navigate])
 
   // Debounced auto-save into the forecasting slice — never lose the tags.
   const saveTimer = useRef(null)
@@ -49,10 +44,12 @@ export default function F1_HorizonNetwork() {
       <div className="di-page di-fc">
         <div className="di-eyebrow">Forecasting · Step 1</div>
         <h1 className="di-h1">Horizon &amp; network</h1>
-        <p className="di-subtitle">
-          Balance the existing volumes first — forecasting grows the balanced
-          base-year counts. Redirecting to results…
-        </p>
+        <NeedsStep
+          title="Balance the existing volumes first"
+          body="Forecasting grows the balanced base-year counts."
+          to="/analysis"
+          label="Go to Run Analysis"
+        />
       </div>
     )
   }

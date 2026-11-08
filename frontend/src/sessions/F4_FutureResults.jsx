@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import { Loader2, Info } from 'lucide-react'
 
 import { subscribe, getSnapshot, isExistingAnalysisDone, setForecasting } from '../store/projectStore'
@@ -60,11 +61,6 @@ export default function F4_FutureResults() {
 
   const [diagrams, setDiagrams] = useState(() => new Map())
 
-  useEffect(() => {
-    if (gateOpen) return
-    const t = setTimeout(() => navigate('/results'), 1200)
-    return () => clearTimeout(t)
-  }, [gateOpen, navigate])
 
   const it = intersections.find((x) => x.num === effActive) ?? null
   const futureBal = results?.[effPeriod]?.pass2?.balanced?.[String(effActive)] ?? {}
@@ -98,7 +94,12 @@ export default function F4_FutureResults() {
       <div className="di-page di-fc">
         <div className="di-eyebrow">Forecasting · Step 4</div>
         <h1 className="di-h1">Future results</h1>
-        <p className="di-subtitle">Balance the existing volumes first. Redirecting…</p>
+        <NeedsStep
+          title="Balance the existing volumes first"
+          body="Forecasting grows the balanced base-year counts."
+          to="/analysis"
+          label="Go to Run Analysis"
+        />
       </div>
     )
   }

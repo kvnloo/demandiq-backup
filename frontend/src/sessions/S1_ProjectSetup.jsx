@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getProjectMeta, setProjectMeta } from '../store/projectStore'
-import { THEMES, getStoredTheme, applyTheme } from '../lib/theme'
-import ThemePickerModal from '../components/ThemePickerModal'
 import SignalFlowHero from '../lib/signal-flow/SignalFlowHero'
 import '../styles/forms.css'
 
@@ -59,13 +57,8 @@ export default function S1_ProjectSetup() {
     }
   }, [form])
 
-  // Appearance is a global, per-device preference — NOT project data — so it
-  // lives outside `form`/projectStore. The modal applies it live; we mirror the
-  // applied id here only to highlight the right card and the trigger swatch.
-  const [theme, setTheme] = useState(getStoredTheme)
-  const [themeOpen, setThemeOpen] = useState(false)
-  const activeTheme = THEMES.find((t) => t.id === theme) ?? THEMES[0]
-  const chooseTheme = (id) => setTheme(applyTheme(id))
+  // Read once: re-deriving it per keystroke would fold the section shut when a field is cleared.
+  const [moreOpen] = useState(() => Boolean(form.projectNumber?.trim() || form.checker?.trim()))
 
   const update = (key, value) => setForm((f) => ({ ...f, [key]: value }))
 
@@ -115,43 +108,29 @@ export default function S1_ProjectSetup() {
   }
 
   return (
-    <form className="di-page" onSubmit={handleSubmit} noValidate>
-      <div className="di-eyebrow">Project Setup</div>
-      <h1 className="di-h1">New project</h1>
+    <form className="di-page di-s1" onSubmit={handleSubmit} noValidate>
+      <div className="di-eyebrow">Project setup</div>
+      <h1 className="di-h1">{form.name?.trim() || 'New project'}</h1>
       <p className="di-subtitle">
         Set up the project once. These details flow through every step.
       </p>
 
-      {/* Signal Flow's "one loud element per page". S1 is the only screen with
-          no data of its own, so it is the only one where an animation competes
-          with nothing. The caption states it is a generic cycle, not this
-          project — the rest of the app shows real volumes, and an unlabelled
-          moving intersection beside them would read as one. */}
-      <SignalFlowHero
-        className="di-s1-hero"
-        mainLabel="Φ2/Φ6 Major St"
-        sideLabel="Φ4/Φ8 Cross St"
-        caption="Generic 72 s cycle — illustration, not project data."
-      />
-
-      <div className="di-form">
-        <div className="di-row">
-          {textField('Project Name', 'name', true, { placeholder: 'e.g. Main Street Corridor Study' })}
-          {textField('Project Number', 'projectNumber', false, { placeholder: '30901249.003' })}
-        </div>
-
-        {textField('Client / Agency', 'client', true, { placeholder: 'e.g. City of Austin' })}
+      <div className="di-s1__layout">
+      <div className="di-form di-s1__form">
+        <div className="sf-eyebrow">Project</div>
+        {textField('Project Name', 'name', true, { placeholder: 'e.g. Main Street Corridor Study' })}
 
         <div className="di-row">
-          {textField('Analyst Initials', 'analyst', true, { placeholder: 'AK' })}
-          {textField('Checker Initials', 'checker', false, { placeholder: 'JS' })}
-        </div>
-
-        <div className="di-row">
-          {textField('Date', 'date', true, { type: 'date' })}
+          {textField('Client / Agency', 'client', true, { placeholder: 'e.g. City of Austin' })}
           {textField('Scenario Name', 'scenario', true, { placeholder: 'Existing' })}
         </div>
 
+        <div className="di-row">
+          {textField('Analyst Initials', 'analyst', true, { placeholder: 'AK' })}
+          {textField('Date', 'date', true, { type: 'date' })}
+        </div>
+
+        <div className="sf-eyebrow di-s1__section">Scope</div>
         <div className="di-field">
           <label className="di-label">
             Project Type<span className="di-required">*</span>
@@ -207,31 +186,14 @@ export default function S1_ProjectSetup() {
           )}
         </div>
 
-        <div className="di-field">
-          <label className="di-label">Appearance</label>
-          <button
-            type="button"
-            className="di-appearance-trigger"
-            onClick={() => setThemeOpen(true)}
-          >
-            <span
-              className="di-theme-card__swatch di-theme-card__swatch--sm"
-              aria-hidden="true"
-              style={{ background: activeTheme.swatch.bg }}
-            >
-              <span
-                className="di-theme-card__surface"
-                style={{ background: activeTheme.swatch.surface }}
-              />
-              <span
-                className="di-theme-card__accent"
-                style={{ background: activeTheme.swatch.accent }}
-              />
-            </span>
-            <span className="di-appearance-trigger__label">{activeTheme.label}</span>
-            <span className="di-appearance-trigger__action">Change</span>
-          </button>
-        </div>
+        {/* Optional fields: folded away, but open if a saved project already uses them. */}
+        <details className="di-more" open={moreOpen || undefined}>
+          <summary>More details <span>project number, checker</span></summary>
+          <div className="di-row">
+            {textField('Project Number', 'projectNumber', false, { placeholder: '30901249.003' })}
+            {textField('Checker Initials', 'checker', false, { placeholder: 'JS' })}
+          </div>
+        </details>
 
         <div className="di-actions di-actions--validated">
           {attempted && !isValid && (
@@ -246,12 +208,18 @@ export default function S1_ProjectSetup() {
         </div>
       </div>
 
-      <ThemePickerModal
-        open={themeOpen}
-        value={theme}
-        onSelect={chooseTheme}
-        onClose={() => setThemeOpen(false)}
-      />
+      {/* The form comes first; the live intersection sits beside it as the
+          page's one loud element. Captioned as a generic cycle, because an
+          unlabelled moving intersection next to real volumes reads as them. */}
+      <aside className="di-s1__side">
+        <SignalFlowHero
+          className="di-s1-hero"
+          mainLabel="Φ2/Φ6 Major St"
+          sideLabel="Φ4/Φ8 Cross St"
+          caption="Generic 72 s cycle — illustration, not project data."
+        />
+      </aside>
+      </div>
     </form>
   )
 }

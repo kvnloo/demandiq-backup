@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Download, Loader2, AlertCircle } from 'lucide-react'
 
 // One per intersection. Presenter — fetch state lives in S7's cache.
@@ -46,12 +46,20 @@ export default function DiagramCard({
   // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror the stored note into the local draft when it changes externally
   useEffect(() => { setDraft(note) }, [note])
 
+  // Picking a marker on the map selects this card; bring it into view so the
+  // map and the list stay linked both ways (the map already flies to a card).
+  const ref = useRef(null)
+  useEffect(() => {
+    if (isSelected) ref.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [isSelected])
+
   const commit = () => {
     if ((draft ?? '').trim() !== (note ?? '').trim()) onNoteCommit?.(draft)
   }
 
   return (
     <div
+      ref={ref}
       className={`di-s7-card${isSelected ? ' di-s7-card--selected' : ''}${status === 'error' ? ' di-s7-card--err' : ''}`}
       onClick={onSelect}
       role="button"

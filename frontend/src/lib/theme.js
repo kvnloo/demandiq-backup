@@ -1,4 +1,6 @@
-// Global appearance theme — Night Traffic (dark, default) / Sunshine (light).
+// Global appearance theme — Signal Flow (dark, default) / Signal Flow Day (light).
+// Night Traffic and Sunshine were retired; a stored id from them falls back to
+// the default via normalizeTheme.
 //
 // This is ONE preference for the whole app, not per-project, so it lives in its
 // own localStorage key (separate from 'demandiq:project') and is applied as the
@@ -7,34 +9,16 @@
 // (see lib/themeTiles.js).
 
 export const THEME_STORAGE_KEY = 'demandiq:theme'
-export const DEFAULT_THEME = 'night-traffic'
+export const DEFAULT_THEME = 'signal-flow'
 
 export const THEMES = [
   {
-    id: 'night-traffic',
-    label: 'Night Traffic',
-    blurb: 'Dark — easy on the eyes for late corridor work and projectors.',
-    // Preview swatch (mirrors themes.css; can't use var() — those resolve to the
-    // ACTIVE theme, but each card must show its OWN palette).
-    swatch: { bg: '#0B0E12', surface: '#161A22', accent: '#60A5FA' },
-  },
-  {
-    id: 'sunshine',
-    label: 'Sunshine',
-    blurb: 'Light — crisp for daytime desk work and report screenshots.',
-    swatch: { bg: '#FAFAF9', surface: '#FFFFFF', accent: '#2563EB' },
-  },
-  {
     id: 'signal-flow',
     label: 'Signal Flow',
-    blurb: 'Dark asphalt and Overpass type — the house theme shared with CrashIQ.',
-    swatch: { bg: '#0D1013', surface: '#151A1F', accent: '#5AA2FF' },
   },
   {
     id: 'signal-flow-day',
     label: 'Signal Flow Day',
-    blurb: 'The same house theme on fresh concrete, for daylight and printing.',
-    swatch: { bg: '#ECEEF0', surface: '#FFFFFF', accent: '#1F5FAD' },
   },
 ]
 
@@ -57,6 +41,9 @@ export function getStoredTheme() {
 
 // Apply a theme to the live document AND persist it. setAttribute drives
 // themes.css + the map-tile observer; returns the normalized id actually applied.
+// The other of the two themes — what the top-bar sun/moon switches to.
+export const otherTheme = (id) => (normalizeTheme(id) === 'signal-flow' ? 'signal-flow-day' : 'signal-flow')
+
 export function applyTheme(id) {
   const theme = normalizeTheme(id)
   document.documentElement.setAttribute('data-theme', theme)
