@@ -213,9 +213,9 @@
 }
 .di-s2-mode__toggle--on,
 .di-s2-mode__toggle--on:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #FFFFFF;
+  background: var(--sel-bg);
+  border-color: var(--sel-ring);
+  color: var(--fg);
 }
 .di-s2-mode__hint {
   padding: 0 8px 0 4px;
@@ -705,8 +705,9 @@
 }
 .di-s2-flow-toolbar__opt--on,
 .di-s2-flow-toolbar__opt--on:hover {
-  background: var(--accent);
-  color: #FFFFFF;
+  background: var(--sel-bg);
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--sel-ring);
 }
 .di-s2-flow-toolbar__opt:disabled {
   opacity: 0.4;
@@ -756,7 +757,7 @@
 /* Stale-lastRun banner (just below the toolbar, top-center) */
 .di-s2-flow-stale {
   position: absolute;
-  top: 16px;
+  top: 64px;   /* clears the map search box, which sits at the top-left */
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
@@ -1182,7 +1183,7 @@
   text-overflow: ellipsis;
 }
 .di-seg__opt:hover { border-color: var(--border-strong); color: var(--text-primary); }
-.di-seg__opt--on { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
+.di-seg__opt--on { background: var(--sel-bg); border-color: var(--sel-ring); color: var(--fg); }
 
 /* Selected pin halo + glued action buttons (Connect / Delete on the pin) */
 .di-pin--selected .di-pin__num {

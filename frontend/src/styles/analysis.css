@@ -269,8 +269,9 @@
   font-family: var(--font-sans);
 }
 .di-s6-lc__period-btn--on {
-  background: var(--accent);
-  color: #FFFFFF;
+  background: var(--sel-bg);
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--sel-ring);
 }
 .di-s6-lc__table {
   width: 100%;

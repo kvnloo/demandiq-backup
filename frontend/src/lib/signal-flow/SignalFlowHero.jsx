@@ -64,7 +64,7 @@ export default function SignalFlowHero({
   }, [mainLabel, sideLabel, speed])
 
   return (
-    <figure className={className} style={{ margin: 0 }}>
+    <figure className={`sf-hero ${className}`}>
       <div className="sf-road">
         <canvas
           ref={canvasRef}

@@ -5,7 +5,7 @@
 // invalid data-theme. A stale id left in localStorage by an older build, a
 // null (never set), or a typo must all resolve to the dark default — not blank.
 
-import { normalizeTheme, DEFAULT_THEME, THEMES } from './theme.js'
+import { normalizeTheme, DEFAULT_THEME, THEMES, otherTheme } from './theme.js'
 
 let passed = 0, failed = 0
 function ok(cond, msg) {
@@ -13,8 +13,6 @@ function ok(cond, msg) {
 }
 
 // ── Known ids pass through untouched ─────────────────────────────────────
-ok(normalizeTheme('night-traffic') === 'night-traffic', 'night-traffic passes through')
-ok(normalizeTheme('sunshine') === 'sunshine', 'sunshine passes through')
 ok(normalizeTheme('signal-flow') === 'signal-flow', 'signal-flow passes through')
 ok(normalizeTheme('signal-flow-day') === 'signal-flow-day', 'signal-flow-day passes through')
 
@@ -23,18 +21,18 @@ ok(normalizeTheme(null) === DEFAULT_THEME, 'null → default')
 ok(normalizeTheme(undefined) === DEFAULT_THEME, 'undefined → default')
 ok(normalizeTheme('') === DEFAULT_THEME, 'empty string → default')
 ok(normalizeTheme('midnight') === DEFAULT_THEME, 'stale/unknown id → default')
+ok(normalizeTheme('night-traffic') === 'signal-flow', 'retired night-traffic → signal-flow')
+ok(normalizeTheme('sunshine') === 'signal-flow', 'retired sunshine → signal-flow')
 
 // ── The default is itself a real theme ───────────────────────────────────
 ok(THEMES.some((t) => t.id === DEFAULT_THEME), 'DEFAULT_THEME is a defined theme')
 
-// ── Every theme fully described + swatched ───────────────────────────────
-// Four: the two kickoff themes plus the two Signal Flow variants.
-ok(THEMES.length === 4, 'four themes defined')
-for (const t of THEMES) {
-  ok(t.id && t.label && t.blurb, `${t.id || '?'} has id/label/blurb`)
-  ok(t.swatch && t.swatch.bg && t.swatch.surface && t.swatch.accent,
-    `${t.id || '?'} has a full preview swatch`)
-}
+// ── Every theme labelled; the top-bar toggle flips between the two ───────
+// Two: Signal Flow dark + day (Night Traffic / Sunshine retired).
+ok(THEMES.length === 2, 'two themes defined')
+for (const t of THEMES) ok(t.id && t.label, `${t.id || '?'} has id/label`)
+ok(otherTheme('signal-flow') === 'signal-flow-day' && otherTheme('signal-flow-day') === 'signal-flow', 'toggle flips')
+ok(otherTheme('sunshine') === 'signal-flow-day', 'retired id toggles from the default')
 
 // Ids must be unique, or normalizeTheme accepts an id the picker can't show
 // and two cards fight over the same selection. Worth asserting now that

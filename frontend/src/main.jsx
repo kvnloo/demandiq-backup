@@ -8,11 +8,12 @@ import './index.css'
 // read them.
 import './lib/signal-flow/bridge.css'
 import './lib/signal-flow/components.css'
+import './styles/shell.css'
 import App from './App.jsx'
 import { initTheme } from './lib/theme.js'
 
-// Apply the saved appearance preference before first paint so Sunshine users
-// don't flash the dark default. themes.css's bare :root keeps night-traffic as
+// Apply the saved appearance preference before first paint so Signal Flow Day
+// users don't flash the dark default. themes.css's bare :root keeps signal-flow as
 // the no-attribute fallback if nothing is stored.
 initTheme()
 

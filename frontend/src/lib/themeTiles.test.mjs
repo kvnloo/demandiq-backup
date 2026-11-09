@@ -2,7 +2,7 @@
 //   node frontend/src/lib/themeTiles.test.mjs
 //
 // Locks the basemap contract: light themes get Esri's Light Gray Canvas,
-// everything else (incl. the no-attribute / night-traffic default) gets Dark
+// everything else (incl. the no-attribute / signal-flow default) gets Dark
 // Gray Canvas. A tile-template edit or a typo'd theme name would otherwise
 // regress the basemap silently — the failure mode is a map that still renders,
 // just wrong, which no screenshot review reliably catches.
@@ -18,13 +18,13 @@ const DARK  = 'World_Dark_Gray_Base'
 const LIGHT = 'World_Light_Gray_Base'
 
 // ── Light themes → Light Gray Canvas ─────────────────────────────────────
-for (const t of ['sunshine', 'signal-flow-day']) {
+for (const t of ['signal-flow-day']) {
   ok(tileUrlForTheme(t).includes(LIGHT), `${t} → light canvas`)
   ok(!tileUrlForTheme(t).includes(DARK), `${t} is not the dark canvas`)
 }
 
 // ── Dark themes → Dark Gray Canvas ───────────────────────────────────────
-for (const t of ['night-traffic', 'signal-flow']) {
+for (const t of ['signal-flow']) {
   ok(tileUrlForTheme(t).includes(DARK), `${t} → dark canvas`)
   ok(!tileUrlForTheme(t).includes(LIGHT), `${t} is not the light canvas`)
 }
@@ -36,7 +36,7 @@ ok(tileUrlForTheme('totally-unknown').includes(DARK), 'unknown theme → dark ca
 // ── Esri path order is {z}/{y}/{x}, NOT the usual {z}/{x}/{y} ────────────
 // Swapping x and y yields a map that renders perfectly and shows the wrong
 // place, so assert the order rather than mere presence.
-for (const t of ['sunshine', 'night-traffic']) {
+for (const t of ['signal-flow-day', 'signal-flow']) {
   const u = tileUrlForTheme(t)
   ok(u.endsWith('/{z}/{y}/{x}'), `${t} url uses Esri's z/y/x order`)
   // Esri serves no subdomains and no retina variant; leaving either placeholder

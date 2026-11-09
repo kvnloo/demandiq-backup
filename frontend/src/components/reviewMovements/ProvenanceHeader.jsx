@@ -8,13 +8,13 @@ export default function ProvenanceHeader({
   const m = methodLabel(lastRun)
   return (
     <div className="di-rm-prov">
-      <button onClick={onPrev} aria-label="Previous intersection">◀</button>
+      <button className="di-btn-ghost" onClick={onPrev} aria-label="Previous intersection">◀</button>
       <span>Int {position} / {total} · {intersection?.name}</span>
-      <button onClick={onNext} aria-label="Next intersection">▶</button>
+      <button className="di-btn-ghost" onClick={onNext} aria-label="Next intersection">▶</button>
 
       <div className="di-segmented" role="group" aria-label="peak period">
-        <button aria-pressed={period === 'AM'} onClick={() => onPeriod('AM')}>AM</button>
-        <button aria-pressed={period === 'PM'} onClick={() => onPeriod('PM')}>PM</button>
+        <button className={`di-segmented__opt${period === 'AM' ? ' di-segmented__opt--on' : ''}`} aria-pressed={period === 'AM'} onClick={() => onPeriod('AM')}>AM</button>
+        <button className={`di-segmented__opt${period === 'PM' ? ' di-segmented__opt--on' : ''}`} aria-pressed={period === 'PM'} onClick={() => onPeriod('PM')}>PM</button>
       </div>
 
       {/* Method meaning is VISIBLE surface text — not hover-gated (locked design). */}

@@ -1,5 +1,6 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import {
   FileSpreadsheet,
   FileJson,
@@ -57,12 +58,6 @@ export default function S8_Export() {
 
   const needsRun = intersections.length === 0 || !hasAnyBalanced(intersections)
 
-  // Empty / unconfigured guard
-  useEffect(() => {
-    if (!needsRun) return
-    const t = setTimeout(() => navigate('/results'), 1000)
-    return () => clearTimeout(t)
-  }, [needsRun, navigate])
 
   // Local UI state
   const [filename, setFilename] = useState(() => slugify(project.name || 'project'))
@@ -80,14 +75,7 @@ export default function S8_Export() {
   const [corrImages, setCorrImages] = useState(null)       // { am: dataUrl, pm: dataUrl, counts: {AM,PM} }
 
   if (needsRun) {
-    return (
-      <div className="di-s8 di-s8--center">
-        <div className="di-s8-empty">
-          <div className="di-banner">Generate results first.</div>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>Redirecting…</p>
-        </div>
-      </div>
-    )
+    return <NeedsStep title="Run the analysis first" body="Exports are built from the balanced results." to="/analysis" label="Go to Run Analysis" />
   }
 
   // ── Excel download ──────────────────────────────────────────────────
