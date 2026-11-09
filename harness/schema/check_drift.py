@@ -30,7 +30,7 @@ MARKERS = {
         "export const defaultApproach = () => ({ exists: true, lanes: [{ movement: 'T' }], stopControlled: false })",
         # balancing defaults consumed by buildPayload
         "linkResolution: cur.linkResolution ?? 'larger'",
-        "convergenceThreshold: cur.convergenceThreshold ?? 0.01",
+        "convergenceThreshold: cur.convergenceThreshold >= 0.1 ? cur.convergenceThreshold : 0.5",
         "maxIterations: cur.maxIterations ?? 500",
         "linkBalanceModes: { ...defaultLinkModes, ...(cur.linkBalanceModes ?? {}) }",
         # per-cell volume shape
@@ -40,7 +40,7 @@ MARKERS = {
         # the exact payload fields the UI sends to /balance-nchrp
         "unbalanced_volumes: { AM: stripVols('AM'), PM: stripVols('PM') }",
         "link_resolution_method: balancing.linkResolution ?? 'larger'",
-        "tolerance: balancing.convergenceThreshold ?? 0.5",
+        "tolerance: balancing.convergenceThreshold >= 0.1 ? balancing.convergenceThreshold : 0.5",
         "const res = await fetch('/api/balance-nchrp', {",
         # buildPayload strips {value,_source} cells down to bare numbers
         "if (cell?.value !== null && cell?.value !== undefined && cell?.value !== '') {",
