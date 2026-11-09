@@ -25,7 +25,10 @@ export default function IntersectionList({
   onReorder,
   onContinue,
   canContinue,
+  minCount = 2,
   stopBlockers = [],
+  legBlockers = [],
+  dupNames = [],
   inspector,
 }) {
   const sensors = useSensors(
@@ -85,8 +88,25 @@ export default function IntersectionList({
       {inspector}
 
       <div className="di-side__footer">
-        {intersections.length < 2 ? (
-          <div className="di-side__hint">Confirm at least 2 intersections</div>
+        {dupNames.map((nums) => (
+          <div key={nums.join()} className="di-side__hint di-side__hint--block" role="status">
+            Intersections {nums.join(' and ')} have the same name — rename one so count files match the right intersection.
+          </div>
+        ))}
+        {intersections.length < minCount ? (
+          <div className="di-side__hint">
+            {minCount === 1 ? 'Add the intersection to continue' : `Add at least ${minCount} intersections to continue`}
+          </div>
+        ) : legBlockers.length > 0 ? (
+          <div className="di-side__hint di-side__hint--block">
+            Pick the missing approach for 3-leg{' '}
+            {legBlockers.map((b, i) => (
+              <Fragment key={b.id}>
+                {i > 0 && ', '}
+                <button type="button" className="di-side__hint-link" onClick={() => onSelect(b.id)}>Int {b.num}</button>
+              </Fragment>
+            ))}
+          </div>
         ) : stopBlockers.length > 0 ? (
           <div className="di-side__hint di-side__hint--block">
             Select stop-controlled approaches:{' '}

@@ -196,11 +196,11 @@ def test_snap_collision():
 
 
 # ── Integration: real SANDAG node (gated) ─────────────────────────────────────
-REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad.shp"
+REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad_2025.shp"
 
 
 @pytest.mark.skipif(not REAL_SHP.exists(),
-                    reason="real SANDAG hwyLoad.shp not present (local-only)")
+                    reason="real SANDAG hwyLoad_2025.shp not present (local-only)")
 def test_real_node_matches_and_reads_inbound():
     from forecasting.adapters.sandag import ingest_sandag
     node_lat, node_lng = 32.624067, -116.959736          # DISCOVERY FALLS node

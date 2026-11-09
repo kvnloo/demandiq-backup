@@ -34,6 +34,17 @@ REFINE_GROWTH_FACTOR_MAX = 4.0
 # Flag when ratio and difference (K supplied) disagree by more than this fraction
 # of the larger — the two methods telling different stories warrants a drill-in.
 METHOD_DIVERGENCE_THRESHOLD = 0.5
+# NCHRP 765 Table 6-3 p. 112 example limits on count ÷ model base (peak-hour terms).
+NCHRP765_MIN_DIFF = 0.5
+NCHRP765_MAX_RAT = 2.0
+# Flag (not cap) yearly growth at/above this — Ohio §2.4 / VDOT review trigger.
+HIGH_GROWTH_PER_YEAR = 0.03
+# NCHRP 255 p. 54: base-year error doesn't carry across a big capacity change.
+CAPACITY_CHANGE_FLAG = 0.25
+# Methods that combine with the difference method, so need the peak-hour factor K.
+NEEDS_K = {"difference", "combined", "nchrp765", "weighted", "modified_average", "odot"}
+# Horizon may run this many years past the count (user decision).
+MAX_HORIZON_YEARS = 50
 
 APPROACHES = ("NB", "SB", "EB", "WB")
 # Approach direction → the direction traffic EXITS the same physical leg.
@@ -44,49 +55,118 @@ def _sum(counts, movements):
     return sum(float(counts.get(m, 0) or 0) for m in movements)
 
 
+def _interp(m_base, m_future, year_base, year_future, year):
+    """Linear model volume at `year` (NCHRP 765 §9.2 p. 223; NCHRP 255 Ch. 7).
+    Extrapolates past either model year the same way."""
+    if year is None or year_future == year_base:
+        return m_base if year is None or year == year_base else m_future
+    return m_base + (m_future - m_base) * (year - year_base) / (year_future - year_base)
+
+
+def _nchrp765_pick(C, Mb, Mf, K, ratio, difference):
+    """NCHRP 765 Table 6-2 col. 12 (printed p. 110), checked against the page:
+      MR < 1: RATIO ≤ 1.0 → RATIO, RATIO ≥ 2.0 → DIFF, else RAf;
+      MR > 1: RATIO ≤ 0.5 → MRATIO, RATIO ≥ 2.0 → DIFF, else RAf (based on MRATIO);
+    where RATIO there is R = count / base assignment (peak-hour units, so K·Mb)
+    and RAf = average(MRATIO, DIFF). MR = 1 exactly: both branches agree."""
+    R = C / (K * Mb)
+    MR = Mf / Mb
+    mratio = ratio if MR <= 1 else ((MR - 1) * difference + ratio) / MR
+    lo = 1.0 if MR < 1 else NCHRP765_MIN_DIFF
+    if R <= lo:
+        return (mratio if MR > 1 else ratio), ("ratio (NCHRP 765, weighted)" if MR > 1 else "ratio"), R
+    if R >= NCHRP765_MAX_RAT:
+        return difference, "difference", R
+    return 0.5 * (mratio + difference), "average of ratio and difference", R
+
+
+def _weighted(ratio, difference, MR):
+    """Weighted growth (NCHRP 765 Table 6-2 'MRATIO'; ODOT APM §6.11 p. 6-75):
+    leans toward difference as model growth MR grows; plain ratio when MR ≤ 1."""
+    return ratio if MR <= 1 else ((MR - 1) * difference + ratio) / MR
+
+
+def _odot_pick(ratio, difference, MR):
+    """ODOT APM v2 Ch. 6 decision tree (pp. 6-75/76), on directional links:
+    model change > 25% → difference; else if growth and difference results are
+    within ±10% → growth (model change < 5%) or weighted growth (≥ 5%); else
+    modified average (mean of weighted growth and difference)."""
+    if abs(MR - 1) > 0.25:
+        return difference, "difference"
+    if abs(difference - ratio) <= 0.10 * max(abs(ratio), 1.0):
+        if abs(MR - 1) < 0.05:
+            return ratio, "ratio"
+        return _weighted(ratio, difference, MR), "weighted growth"
+    return 0.5 * (_weighted(ratio, difference, MR) + difference), "modified average"
+
+
 def _refine_one(count_base, model_base, model_future, *,
-                peak_hour_factor, method, growth_factor_max):
-    """NCHRP 255 refinement for one directional total (inbound or outbound)."""
-    C, Mb, Mf = float(count_base), float(model_base), float(model_future)
+                peak_hour_factor, method, growth_factor_max, years=None):
+    """NCHRP 255/765 refinement for one directional total (inbound or outbound).
+
+    years: optional (model_base_year, model_future_year, count_year, horizon_year).
+    When given, the model volumes are first interpolated to the count and horizon
+    years, so growth covers only count→horizon, not the model's own span.
+    """
+    C, Mb_raw, Mf_raw = float(count_base), float(model_base), float(model_future)
     flags = []
+    Mb, Mf = Mb_raw, Mf_raw
+    if years is not None:
+        yb, yf, yc, yh = years
+        Mb = _interp(Mb_raw, Mf_raw, yb, yf, yc)
+        Mf = _interp(Mb_raw, Mf_raw, yb, yf, yh)
+        for label, val, yr in (("count-year", Mb, yc), ("horizon-year", Mf, yh)):
+            if val < 0:   # a falling model trend run past its years can cross zero
+                flags.append({"code": "REFINE-EXTRAPOLATED-BELOW-ZERO",
+                              "message": (f"the model's falling trend, extended to {yr}, goes below zero "
+                                          f"({val:.0f} veh); DemandIQ used 0 for the {label} model volume — "
+                                          "this leg's forecast is unreliable: use a nearer horizon or another method.")})
+        Mb, Mf = max(Mb, 0.0), max(Mf, 0.0)
+    K = peak_hour_factor
+    out = {"count_base": C, "model_base_raw": Mb_raw, "model_future_raw": Mf_raw,
+           "model_base": round(Mb, 2), "model_future": round(Mf, 2)}
 
     growth = (Mf / Mb) if Mb > 0 else None
     ratio = (C * growth) if growth is not None else None
-    if peak_hour_factor is not None:
-        difference = C + peak_hour_factor * (Mf - Mb)
-        combined = 0.5 * (ratio + difference) if ratio is not None else difference
-    else:
-        difference = None
-        combined = None
+    difference = C + K * (Mf - Mb) if K is not None else None
+    combined = (0.5 * (ratio + difference) if ratio is not None else difference) if K is not None else None
+    R = (C / (K * Mb)) if (K is not None and Mb > 0) else None
 
     if Mb <= 0:
-        # Ratio undefined (model shows no base volume) — hold at the count; the
-        # model carries no usable growth signal for this leg.
+        if K is not None and Mf > 0 and difference is not None and difference >= 0:
+            # NCHRP 255 p. 54: a tiny/zero base makes the ratio explode — use difference.
+            flags.append({"code": "REFINE-MODEL-ZERO-BASE",
+                          "message": f"model base volume is 0 — used difference {difference:.0f} (NCHRP 255 p. 54)."})
+            return {**out, "growth_factor": None, "count_model_ratio": None, "ratio": None,
+                    "difference": difference, "combined": combined, "refined": difference,
+                    "method": "difference", "status": "refined", "flags": flags,
+                    **_growth_meta(C, difference, years, flags)}
         flags.append({
             "code": "REFINE-MODEL-ZERO-BASE",
-            "message": f"model base volume is 0 — ratio undefined; held at count {C:.0f}.",
+            "message": (f"model base volume is 0 — ratio undefined; held at count {C:.0f}"
+                        + ("" if K is not None else " (give a peak-hour factor to use the difference method)") + "."),
         })
-        return {
-            "count_base": C, "model_base": Mb, "model_future": Mf,
-            "growth_factor": None, "ratio": None, "difference": difference,
-            "combined": combined, "refined": C, "method": "held-flat",
-            "status": "held-flat", "flags": flags,
-        }
+        return {**out, "growth_factor": None, "count_model_ratio": None, "ratio": None,
+                "difference": difference, "combined": combined, "refined": C,
+                "method": "held-flat", "status": "held-flat", "flags": flags,
+                **_growth_meta(C, C, years, [])}
 
-    # Mb > 0 — pick the requested method, falling back to ratio when a method
-    # needs K but none was supplied.
-    if method == "ratio":
-        selected, sel_method = ratio, "ratio"
-    elif method in ("difference", "combined"):
-        avail = difference if method == "difference" else combined
-        if avail is None:
-            selected, sel_method = ratio, "ratio"
-            flags.append({
-                "code": "REFINE-NO-K",
-                "message": f"{method} requested but no peak_hour_factor — fell back to ratio.",
-            })
-        else:
-            selected, sel_method = avail, method
+    if method in NEEDS_K and K is None:
+        flags.append({"code": "REFINE-NO-K",
+                      "message": f"{method} requested but no peak_hour_factor — fell back to ratio."})
+        method = "ratio"
+    if method == "difference":
+        selected, sel_method = difference, "difference"
+    elif method == "combined":
+        selected, sel_method = combined, "combined"
+    elif method == "nchrp765":
+        selected, sel_method, _ = _nchrp765_pick(C, Mb, Mf, K, ratio, difference)
+    elif method == "weighted":
+        selected, sel_method = _weighted(ratio, difference, growth), "weighted growth"
+    elif method == "modified_average":
+        selected, sel_method = 0.5 * (_weighted(ratio, difference, growth) + difference), "modified average"
+    elif method == "odot":
+        selected, sel_method = _odot_pick(ratio, difference, growth)
     else:
         selected, sel_method = ratio, "ratio"
 
@@ -95,6 +175,12 @@ def _refine_one(count_base, model_base, model_future, *,
             "code": "REFINE-GROWTH-OUTLIER",
             "message": (f"model growth factor {growth:.1f}× exceeds "
                         f"{growth_factor_max:.1f}× — verify the model volumes."),
+        })
+    if R is not None and not (NCHRP765_MIN_DIFF <= R <= NCHRP765_MAX_RAT):
+        flags.append({
+            "code": "REFINE-MODEL-VS-COUNT",
+            "message": (f"count is {R:.2f}× the model's base volume (peak-hour terms) — the model "
+                        "may not know this road well (NCHRP 765 §6.1 Step 2); check before relying on it."),
         })
     if ratio is not None and difference is not None:
         denom = max(abs(ratio), abs(difference), 1.0)
@@ -107,18 +193,42 @@ def _refine_one(count_base, model_base, model_future, *,
 
     refined = selected
     if refined < 0:
+        # NCHRP 255 p. 50: a negative difference result → use the ratio result.
         flags.append({
-            "code": "REFINE-NEGATIVE-CLAMP",
-            "message": f"{sel_method} forecast {refined:.0f} < 0 — clamped to 0.",
+            "code": "REFINE-NEGATIVE-TO-RATIO",
+            "message": f"{sel_method} forecast {refined:.0f} < 0 — used ratio {ratio:.0f} (NCHRP 255 p. 50).",
         })
-        refined = 0.0
+        refined, sel_method = ratio, "ratio"
 
     return {
-        "count_base": C, "model_base": Mb, "model_future": Mf,
-        "growth_factor": round(growth, 4), "ratio": ratio,
+        **out, "growth_factor": round(growth, 4),
+        "count_model_ratio": round(R, 3) if R is not None else None, "ratio": ratio,
         "difference": difference, "combined": combined,
+        # every method's answer, so the UI can show them side by side
+        "weighted": _weighted(ratio, difference, growth) if difference is not None else None,
+        "modified_average": (0.5 * (_weighted(ratio, difference, growth) + difference)
+                             if difference is not None else None),
         "refined": refined, "method": sel_method, "status": "refined", "flags": flags,
+        **_growth_meta(C, refined, years, flags),
     }
+
+
+def _growth_meta(C, refined, years, flags):
+    """Annual growth count→horizon. No floor: declines are allowed (the user's
+    call — recent MPO forecasts do go negative), only noted."""
+    if years is None or C <= 0 or refined <= 0:
+        return {"annual_growth_pct": None}
+    n = years[3] - years[2]
+    if n <= 0:
+        return {"annual_growth_pct": None}
+    rate = (refined / C) ** (1 / n) - 1
+    if rate < 0:
+        flags.append({"code": "REFINE-DECLINE",
+                      "message": f"model shows traffic falling {rate:.1%}/yr — kept as is; note the reason in the report."})
+    elif rate >= HIGH_GROWTH_PER_YEAR:
+        flags.append({"code": "REFINE-HIGH-GROWTH",
+                      "message": f"growth {rate:.1%}/yr is high (3%/yr+ gets a second look in DOT practice)."})
+    return {"annual_growth_pct": round(rate * 100, 2)}
 
 
 def _absent_leg():
@@ -142,6 +252,8 @@ def refine_corridor(
     peak_hour_factor=None,
     method="ratio",
     growth_factor_max=REFINE_GROWTH_FACTOR_MAX,
+    count_year=None,
+    horizon_year=None,
 ):
     """Refine every matched leg of every intersection for one period.
 
@@ -154,7 +266,13 @@ def refine_corridor(
         period: a contract.Period selecting the model flow period (Period.AM/PM).
         peak_hour_factor: optional K (period→peak-hour). Enables difference/
             combined; ratio ignores it (growth factor is K-invariant).
-        method: 'ratio' (default/operative) | 'difference' | 'combined'.
+        method: 'ratio' (default/operative) | 'difference' | 'combined' |
+            'nchrp765' (picks per leg by count ÷ model) | 'weighted' |
+            'modified_average' | 'odot' (ODOT APM decision tree). All but
+            ratio need K.
+        count_year / horizon_year: the analysis years. When given, model volumes
+            are interpolated to them first (NCHRP 765 §9.2). Omitted → the model
+            years are used as-is (legacy behaviour).
 
     Returns:
         list of per-intersection dicts:
@@ -166,6 +284,16 @@ def refine_corridor(
         Each inbound/outbound dict carries count_base, model_base, model_future,
         growth_factor, ratio, difference, combined, refined, method, status.
     """
+    years = None
+    if count_year is not None and horizon_year is not None:
+        count_year, horizon_year = int(count_year), int(horizon_year)
+        if not count_year <= horizon_year <= count_year + MAX_HORIZON_YEARS:
+            raise ValueError(f"horizon year {horizon_year} must be between the count year "
+                             f"{count_year} and {count_year + MAX_HORIZON_YEARS}.")
+        if base_layer.scenario_year == horizon_layer.scenario_year:
+            raise ValueError(f"base and horizon networks are the same model year ({base_layer.scenario_year}) "
+                             "— interpolating to the count and forecast years needs two different model years.")
+        years = (base_layer.scenario_year, horizon_layer.scenario_year, count_year, horizon_year)
     base_idx = {lk.link_id: lk for lk in base_layer.links}
     horizon_idx = {lk.link_id: lk for lk in horizon_layer.links}
 
@@ -222,12 +350,33 @@ def refine_corridor(
             c_out = _sum(counts, DIRECTION_SPEC[out_dir]["outflow"])
 
             kw = dict(peak_hour_factor=peak_hour_factor, method=method,
-                      growth_factor_max=growth_factor_max)
+                      growth_factor_max=growth_factor_max, years=years)
+            leg_flags = []
+            lb, lh = base_link.lanes or 0, horizon_link.lanes or 0
+            if lb > 0 and abs(lh - lb) / lb > CAPACITY_CHANGE_FLAG:
+                leg_flags.append({
+                    "code": "REFINE-CAPACITY-CHANGE",
+                    "message": (f"model lanes change {lb}→{lh} — the base-year count/model "
+                                "relationship may not hold (NCHRP 255 p. 54); review this leg."),
+                })
+            if years is not None:
+                lo_y, hi_y = min(years[0], years[1]), max(years[0], years[1])
+                why = []
+                if years[3] > hi_y + 5:
+                    why.append(f"Model only goes to {hi_y}; {years[3]} is extrapolated")
+                if years[2] < lo_y - 5:
+                    why.append(f"Model starts at {lo_y}; the {years[2]} count year is extrapolated")
+                if why:
+                    leg_flags.append({
+                        "code": "REFINE-EXTRAPOLATED",
+                        "message": ("; ".join(why) + " (more than 5 years past the model runs, "
+                                    "ODOT APM §6.2) — treat these volumes as less certain."),
+                    })
             approaches[d] = {
                 "status": "bound", "link_id": link_id,
                 "inbound": _refine_one(c_in, mb_in, mf_in, **kw),
                 "outbound": _refine_one(c_out, mb_out, mf_out, **kw),
-                "flags": [],
+                "flags": leg_flags,
             }
 
         out.append({

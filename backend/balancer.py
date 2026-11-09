@@ -100,6 +100,19 @@ LEG_OUT_DIR = {0: 'SB', 1: 'NB', 2: 'WB', 3: 'EB'}   # cars exiting via leg
 COORD_DEGENERACY_EPS = 1e-6
 
 
+def _orient(a, b, axis, coords):
+    """(first, second, fell_back): (west, east) for EB/WB or (south, north) for
+    NB/SB. Coordinates decide unless missing or coincident within
+    COORD_DEGENERACY_EPS; then the smaller intersection number is west/south.
+    The ONE orientation rule every balancing step uses."""
+    key = 'lng' if axis == 'EB/WB' else 'lat'
+    va = (coords or {}).get(a, {}).get(key)
+    vb = (coords or {}).get(b, {}).get(key)
+    if va is not None and vb is not None and abs(va - vb) > COORD_DEGENERACY_EPS:
+        return (a, b, False) if va < vb else (b, a, False)
+    return (a, b, True) if a < b else (b, a, True)
+
+
 def resolve_link_volumes(volumes, links, method='larger', coords=None,
                           geometry_fallbacks=None, raw_pairs_out=None):
     """STEP A — collapse two adjacent intersection counts on the same link
@@ -140,17 +153,10 @@ def resolve_link_volumes(volumes, links, method='larger', coords=None,
         a, b = int(L['fromNum']), int(L['toNum'])
         axis = L.get('direction')
         if axis == 'EB/WB':
-            # Determine which is west by longitude (or fallback: smaller num is west)
-            a_lng = coords.get(a, {}).get('lng')
-            b_lng = coords.get(b, {}).get('lng')
-            if (a_lng is not None and b_lng is not None
-                    and abs(a_lng - b_lng) > COORD_DEGENERACY_EPS):
-                west, east = (a, b) if a_lng < b_lng else (b, a)
-            else:
-                # Either coord missing or coords are coincident within epsilon —
-                # int-number ordering is the only signal we have. Record so the
-                # engineer sees a named warning instead of mystery LINK-DELTA.
-                west, east = (a, b) if a < b else (b, a)
+            # Which is west: coords, else number order (recorded so the engineer
+            # sees a named warning instead of a mystery LINK-DELTA).
+            west, east, fell_back = _orient(a, b, axis, coords)
+            if fell_back:
                 _note_fallback(a, b)
             for dir_code, up, dn in (('EB', west, east), ('WB', east, west)):
                 up_vols = volumes.get(up, {})
@@ -165,13 +171,8 @@ def resolve_link_volumes(volumes, links, method='larger', coords=None,
                         'raw_downstream': float(count_dn),
                     }
         elif axis == 'NB/SB':
-            a_lat = coords.get(a, {}).get('lat')
-            b_lat = coords.get(b, {}).get('lat')
-            if (a_lat is not None and b_lat is not None
-                    and abs(a_lat - b_lat) > COORD_DEGENERACY_EPS):
-                south, north = (a, b) if a_lat < b_lat else (b, a)
-            else:
-                south, north = (a, b) if a < b else (b, a)
+            south, north, fell_back = _orient(a, b, axis, coords)
+            if fell_back:
                 _note_fallback(a, b)
             for dir_code, up, dn in (('NB', south, north), ('SB', north, south)):
                 up_vols = volumes.get(up, {})
@@ -200,12 +201,7 @@ def _build_links_by_int(links, coords=None):
         a, b = int(L['fromNum']), int(L['toNum'])
         axis = L.get('direction')
         if axis == 'EB/WB':
-            a_lng = coords.get(a, {}).get('lng')
-            b_lng = coords.get(b, {}).get('lng')
-            if a_lng is not None and b_lng is not None:
-                a_west = a_lng < b_lng
-            else:
-                a_west = a < b
+            a_west = _orient(a, b, axis, coords)[0] == a
             if a_west:
                 out[a].append((b, 'E', axis))
                 out[b].append((a, 'W', axis))
@@ -213,12 +209,7 @@ def _build_links_by_int(links, coords=None):
                 out[a].append((b, 'W', axis))
                 out[b].append((a, 'E', axis))
         elif axis == 'NB/SB':
-            a_lat = coords.get(a, {}).get('lat')
-            b_lat = coords.get(b, {}).get('lat')
-            if a_lat is not None and b_lat is not None:
-                a_south = a_lat < b_lat
-            else:
-                a_south = a < b
+            a_south = _orient(a, b, axis, coords)[0] == a
             if a_south:
                 out[a].append((b, 'N', axis))
                 out[b].append((a, 'S', axis))
@@ -358,21 +349,11 @@ def balance_leg_totals(
         axis = L.get('direction')
         pair = []
         if axis == 'EB/WB':
-            a_lng = coords.get(a, {}).get('lng')
-            b_lng = coords.get(b, {}).get('lng')
-            if a_lng is not None and b_lng is not None:
-                west, east = (a, b) if a_lng < b_lng else (b, a)
-            else:
-                west, east = (a, b) if a < b else (b, a)
+            west, east, _ = _orient(a, b, axis, coords)
             pair = [(west, LEG_INDEX['E'], east, LEG_INDEX['W'], 'EB', L_idx),
                     (east, LEG_INDEX['W'], west, LEG_INDEX['E'], 'WB', L_idx)]
         elif axis == 'NB/SB':
-            a_lat = coords.get(a, {}).get('lat')
-            b_lat = coords.get(b, {}).get('lat')
-            if a_lat is not None and b_lat is not None:
-                south, north = (a, b) if a_lat < b_lat else (b, a)
-            else:
-                south, north = (a, b) if a < b else (b, a)
+            south, north, _ = _orient(a, b, axis, coords)
             pair = [(south, LEG_INDEX['N'], north, LEG_INDEX['S'], 'NB', L_idx),
                     (north, LEG_INDEX['S'], south, LEG_INDEX['N'], 'SB', L_idx)]
         if not pair:
@@ -738,9 +719,11 @@ def _adjust_leg_to_target(balanced_int, ltr_keys, raw_int, target, shared_keys=N
             # Increment: prefer non-shared, then shared. Within each tier,
             # add 5 to the largest cell. No fillable cell → leave the shortfall
             # visible (structural: the leg can't physically carry this flow).
+            # A movement counted as 0 stays 0 (IPF can't create it either).
             for tier in (non_shared, shared_in_leg):
-                if tier:
-                    largest_k = max(tier, key=lambda k: balanced_int.get(k, 0))
+                grow = [k for k in tier if raw_int.get(k, 0) > 0]
+                if grow:
+                    largest_k = max(grow, key=lambda k: balanced_int.get(k, 0))
                     balanced_int[largest_k] += 5
                     break
             else:
@@ -770,7 +753,8 @@ def compute_link_conservation(balanced, resolved_links, link_modes=None):
         d_vols = balanced.get(d, {})
         spec = DIRECTION_SPEC[direction]
         outflow = sum(u_vols.get(k, 0) for k in spec['outflow']) + u_vols.get(spec['outflow_u'], 0)
-        inflow  = sum(d_vols.get(k, 0) for k in spec['approach'])
+        # a U-turn at the downstream intersection arrived on this link too
+        inflow  = sum(d_vols.get(k, 0) for k in spec['approach']) + d_vols.get(direction + 'U', 0)
         out.append({
             'fromNum': u,
             'toNum': d,
@@ -837,21 +821,11 @@ def _build_link_modes(links, coords=None):
         axis = L.get('direction')
         mode = L.get('mode', 'Full')
         if axis == 'EB/WB':
-            a_lng = coords.get(a, {}).get('lng')
-            b_lng = coords.get(b, {}).get('lng')
-            if a_lng is not None and b_lng is not None:
-                west, east = (a, b) if a_lng < b_lng else (b, a)
-            else:
-                west, east = (a, b) if a < b else (b, a)
+            west, east, _ = _orient(a, b, axis, coords)
             out[(west, east, 'EB')] = mode
             out[(east, west, 'WB')] = mode
         elif axis == 'NB/SB':
-            a_lat = coords.get(a, {}).get('lat')
-            b_lat = coords.get(b, {}).get('lat')
-            if a_lat is not None and b_lat is not None:
-                south, north = (a, b) if a_lat < b_lat else (b, a)
-            else:
-                south, north = (a, b) if a < b else (b, a)
+            south, north, _ = _orient(a, b, axis, coords)
             out[(south, north, 'NB')] = mode
             out[(north, south, 'SB')] = mode
     return out
@@ -890,7 +864,8 @@ def source_outlier_flags(raw_volumes, period=None,
          is structural, not an outlier).
       2. Skip if fewer than min_intersections samples (stats noisy on tiny
          corridors).
-      3. Compute corridor median + MAD-based robust σ. Flag any intersection
+      3. Compute corridor median + MAD-based robust σ (floored at 10% of the
+         median, so a tight sample can't make normal variation look extreme). Flag any intersection
          whose |total - median| exceeds BOTH sigma_threshold × robust σ AND
          abs_floor_veh. The absolute floor prevents low-volume corridors
          (median ≈ 15, MAD ≈ 1, robust σ ≈ 1.5 veh) from false-positiving on
@@ -931,11 +906,9 @@ def source_outlier_flags(raw_volumes, period=None,
         vals = list(totals.values())
         med = _median(vals)
         mad = _median([abs(v - med) for v in vals])
-        # MAD == 0 → most of the values are identical; we have no scale to
-        # measure deviation against. Skip rather than fire arbitrary alarms.
-        if mad <= 0:
-            continue
-        robust_sigma = MAD_TO_SIGMA * mad
+        # Floor σ at 10% of the median: ordinary count-to-count variation at a
+        # corridor (±10%) must not read as many σ when the sample is tight.
+        robust_sigma = max(MAD_TO_SIGMA * mad, 0.10 * med)
 
         for int_num in sorted(totals.keys()):
             total = totals[int_num]
@@ -1002,6 +975,68 @@ def fractional_volume_flags(raw_volumes, period=None, eps=1e-6):
     return flags
 
 
+def reconciliation_adjustment_flags(raw_volumes, balanced, period=None,
+                                    abs_threshold_veh=30.0, geh_threshold=5.0):
+    """Fix 1 — reconciliation-adjustment disclosure (detection only, never
+    alters volumes). Flag every movement whose balanced value moved far from
+    its raw input: |balanced − raw| ≥ abs_threshold_veh AND
+    GEH(balanced, raw) ≥ geh_threshold — both must hold so small movements
+    don't spam flags. Covers BOTH directions: inflations and reductions
+    (complements the known drop-below-raw NCHRP behavior, doesn't replace it).
+
+    Why this exists: post-round link reconciliation can concentrate
+    accumulated adjacent-link disagreement onto one low-volume movement —
+    canonically the corridor through at a T-intersection, the only cell
+    shared by both adjacent link constraints — inflating it several-fold
+    while post-round link conservation still closes exactly (0.0). No
+    conservation, convergence, or residual check can see it; the balanced
+    number reads as trustworthy. See
+    harness/knowledge/diagnosis-through-inflation.md for the worked cases.
+
+    Args:
+        raw_volumes: { int_num: { movement: value } } — pre-balancing counts
+        balanced:    { int_num: { movement: value } } — final balanced output
+        period:      optional 'AM'|'PM', baked into message + 'period' key
+
+    Returns: list of {'check','int','movement','message'[,'period']} dicts,
+    ordered by int_num then standard movement order (deterministic).
+    """
+    import math
+    flags = []
+    for int_num in sorted(raw_volumes.keys()):
+        raw_int = raw_volumes[int_num] or {}
+        bal_int = (balanced or {}).get(int_num) or {}
+        for mv in MOVEMENTS:
+            raw_v = float(raw_int.get(mv, 0) or 0)
+            bal_v = float(bal_int.get(mv, 0) or 0)
+            delta = bal_v - raw_v
+            if abs(delta) < abs_threshold_veh:
+                continue
+            total = bal_v + raw_v
+            geh = math.sqrt(2.0 * delta * delta / total) if total > 0 else 0.0
+            if geh < geh_threshold:
+                continue
+            direction_word = 'inflation' if delta > 0 else 'reduction'
+            pstr = f" ({period})" if period else ""
+            pct = f"{delta / raw_v * 100.0:+.0f}%, " if raw_v > 0 else ""
+            flag = {
+                'check': 'RECON-ADJUST',
+                'int': int_num,
+                'movement': mv,
+                'message': (
+                    f"Int {int_num} {mv}{pstr}: raw {raw_v:.0f} → balanced "
+                    f"{bal_v:.0f} ({pct}GEH {geh:.1f}). Large reconciliation "
+                    f"adjustment ({direction_word}) — the balanced value is "
+                    f"driven by adjacent link targets, not the source count. "
+                    f"Engineer review recommended."
+                ),
+            }
+            if period:
+                flag['period'] = period
+            flags.append(flag)
+    return flags
+
+
 def balance_nchrp(
     raw_volumes,
     links,
@@ -1045,8 +1080,9 @@ def balance_nchrp(
                      resolution per S5 setting.
         coords:      { int_num: {'lat','lng'} } — for geographic leg ordering.
         round_to_5:  round balanced up to next multiple of 5.
-        tol:         convergence tolerance (max cell delta between iters,
-                     vehicles).
+        tol:         convergence tolerance in vehicles: an intersection is
+                     'converged' only when its final residual (max leg-total
+                     miss after IPF) is <= tol.
         max_iter:    IPF iteration cap per intersection.
 
     Returns:
@@ -1155,17 +1191,18 @@ def balance_nchrp(
     # via compute_link_conservation; engineers see exactly where adjacent
     # counts disagree.
     for int_num, M in matrices.items():
-        # Use 0.01 veh tolerance — far tighter than the default 0.5 — because
-        # Level 1 already gave us balanced targets. The only sources of
-        # non-zero residual are (a) IPF cell-stability tolerance and
-        # (b) structural infeasibility from thin matrices.
+        # Iterate to at most 0.01 veh cell stability (tighter if the caller
+        # asked for less) — Level 1 already gave us balanced targets. The only
+        # sources of non-zero residual are (a) IPF cell-stability tolerance and
+        # (b) structural infeasibility from thin matrices. `tol` (vehicles) is
+        # the caller's bar: converged only if the leftover residual meets it.
         M_out, conv, iters_used, final_residual = furness_intersection(
             M, row_targets_per_int[int_num], col_targets_per_int[int_num],
-            presents[int_num], tol=0.01, max_iter=max(max_iter, 2000),
+            presents[int_num], tol=min(tol, 0.01), max_iter=max(max_iter, 2000),
         )
         matrices[int_num] = M_out
         iterations[int_num] = iters_used
-        converged_map[int_num] = conv
+        converged_map[int_num] = conv and final_residual <= tol
         final_residual_map[int_num] = final_residual
 
     # Build balanced dict from final matrices (skip pass-through intersections)
@@ -1186,8 +1223,9 @@ def balance_nchrp(
                 'check': 'NCHRP-CONV',
                 'int': int_num,
                 'message': (
-                    f"Int {int_num}: inner IPF did not stabilize in {max_iter} iter on "
-                    f"last outer pass (max cell delta still > {tol} veh)."
+                    f"Int {int_num}: balancing stopped with a leftover mismatch of "
+                    f"{final_residual_map[int_num]:.2f} veh, above the {tol:g} veh "
+                    f"tolerance. Check this intersection's counts."
                 ),
             })
 
@@ -1307,7 +1345,7 @@ def balance_nchrp(
                     any_change = True
 
                 # Downstream: leg-row cells. Same shared-cell logic for cols.
-                d_target = canonical
+                d_target = canonical - balanced[d].get(direction + 'U', 0)
                 d_keys = spec['approach']
                 d_shared = _shared_keys_approach(d, d_keys, d_leg_idx)
                 d_sum_before = sum(balanced[d].get(k, 0) for k in d_keys)

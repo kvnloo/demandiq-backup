@@ -163,11 +163,11 @@ def test_geometry_reprojected_to_4326(synthetic_sandag_shp, project_points_near)
 
 
 # ── Integration: real SANDAG file (skipped when absent, e.g. on Render/CI) ─────
-REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad.shp"
+REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad_2025.shp"
 
 
 @pytest.mark.skipif(not REAL_SHP.exists(),
-                    reason="real SANDAG hwyLoad.shp not present (local-only)")
+                    reason="real SANDAG hwyLoad_2025.shp not present (local-only)")
 def test_real_sandag_ingest():
     # A verified real network node (a Major Arterial endpoint, "DISCOVERY FALLS")
     # so the 300 ft filter is guaranteed to find the links sharing that node.

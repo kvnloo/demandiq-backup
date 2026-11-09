@@ -158,13 +158,13 @@ def test_uturn_passthrough():
 
 
 # ── Integration: full pipeline on real geometry, identity growth ──────────────
-REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad.shp"
+REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad_2025.shp"
 _ALL12 = ["NBL", "NBT", "NBR", "SBL", "SBT", "SBR",
           "EBL", "EBT", "EBR", "WBL", "WBT", "WBR"]
 
 
 @pytest.mark.skipif(not REAL_SHP.exists(),
-                    reason="real SANDAG hwyLoad.shp not present (local-only)")
+                    reason="real SANDAG hwyLoad_2025.shp not present (local-only)")
 def test_real_pipeline_identity_growth():
     from forecasting.adapters.sandag import ingest_sandag
     lat, lng = 32.624067, -116.959736                     # DISCOVERY FALLS node
@@ -176,3 +176,12 @@ def test_real_pipeline_identity_growth():
     assert 1 in futures
     # Identity growth (+ held-flat pending legs) → matrix ≈ base; total preserved.
     assert _mv(futures[1], _ALL12) == pytest.approx(1200.0, rel=0.05)
+
+
+def test_in_and_out_evened_before_furness():
+    from forecasting.pass1 import forecast_intersection
+    legs = {d: {"status": "bound", "inbound": {"refined": i}, "outbound": {"refined": o}}
+            for d, i, o in (("NB", 700, 500), ("SB", 600, 500), ("EB", 400, 300), ("WB", 300, 300))}
+    future, meta = forecast_intersection(COUNTS[1], legs)
+    assert any(f["code"] == "PASS1-INOUT-EVENED" for f in meta["flags"])
+    assert sum(future[m] for m in COUNTS[1]) == pytest.approx(0.5 * (2000 + 1600), rel=0.01)

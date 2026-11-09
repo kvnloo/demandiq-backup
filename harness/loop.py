@@ -16,9 +16,10 @@ import time
 import traceback
 from datetime import datetime, timezone
 
-from . import operate, puzzler
+from . import forecast_puzzler, operate, puzzler
+from .forecast_runner import execute_forecast_run
 from .notify import SessionNotifier
-from .runner import execute_run, print_row
+from .runner import _git_sha, execute_run, print_row
 from .scorekeeper import HARNESS_ROOT
 
 ERROR_LOG = HARNESS_ROOT / 'harness_errors.log'
@@ -44,6 +45,13 @@ def parse_tier_mix(text):
     return mix
 
 
+def is_forecast_seed(seed, share):
+    """Seeded track choice on its own RNG stream: a balancing seed keeps its
+    exact puzzle and tier, so old repro commands still hold."""
+    import random
+    return share > 0 and random.Random(f'examiner-track:{seed}').random() < share
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description='Run the Examiner forever.')
     p.add_argument('--start-seed', type=int, default=1)
@@ -57,6 +65,8 @@ def main(argv=None):
     p.add_argument('--tier-mix', type=parse_tier_mix, default=None,
                    help="seeded per-run tier rotation weights, e.g. "
                         "'A:20,B:30,C:30,D:20' (the default mix)")
+    p.add_argument('--forecast-share', type=float, default=0.25,
+                   help='share of runs that test FORECASTING (tiers FA/FB/FC); 0 = balancing only')
     args = p.parse_args(argv)
 
     # Observation only: the notifier reads results rows, never influences
@@ -71,8 +81,13 @@ def main(argv=None):
                 # Tier per run: pinned via --tier, else seeded rotation over
                 # the (configurable) mix — deterministic per seed, so any run
                 # is reproducible with run_one --seed N --tier X.
-                tier = args.tier or puzzler.tier_for_seed(seed, args.tier_mix)
-                row = execute_run(seed, base_url=args.base_url, tier=tier)
+                if is_forecast_seed(seed, args.forecast_share) and not args.tier:
+                    row = execute_forecast_run(seed, base_url=args.base_url,
+                                               tier=forecast_puzzler.tier_for_seed(seed),
+                                               git_sha=_git_sha())
+                else:
+                    tier = args.tier or puzzler.tier_for_seed(seed, args.tier_mix)
+                    row = execute_run(seed, base_url=args.base_url, tier=tier)
                 print_row(row)
                 notifier.on_run(row)
             except KeyboardInterrupt:

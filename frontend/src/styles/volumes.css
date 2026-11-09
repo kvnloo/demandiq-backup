@@ -714,3 +714,14 @@ td.di-vol-dir {
 .di-paste__tr--err .di-paste__status { color: #FF8B8B; }
 .di-paste__tr--warn td { background: rgba(255, 180, 84, 0.06); }
 .di-paste__tr--warn .di-paste__status { color: #FFB454; }
+
+/* Rejected typed count: red cell + a message that floats below it (the cell is
+   only 50px wide). The store still holds the last good value. */
+.di-vol-td--bad { outline: 1px solid var(--signal-red); outline-offset: -1px; }
+.di-vol-cell-err {
+  position: absolute; left: 0; top: 100%; z-index: 3; width: 220px;
+  padding: 6px 8px; border-radius: 6px; font-size: 11px; line-height: 1.35;
+  background: var(--surface); border: 1px solid var(--signal-red); color: var(--fg);
+}
+.di-vol-paste-note { margin: 0 0 8px; display: flex; gap: 10px; align-items: baseline; }
+.di-vol-paste-note__x { margin-left: auto; background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }

@@ -12,3 +12,20 @@ export function largestLinkGap(lastRun, period) {
   }
   return best
 }
+
+// Total balanced volume entering all intersections in one period, with
+// engineer overrides applied — the same final numbers the diagrams and Excel
+// use. null when nothing is balanced, so the KPI shows a dash, not a zero.
+export function enteringTotal(intersections, period, overrides) {
+  let sum = 0
+  for (const it of intersections ?? []) {
+    const bal = it.balanced?.[period]
+    if (!bal) continue
+    const ov = overrides?.[period]?.[String(it.num)] ?? {}
+    for (const mv of new Set([...Object.keys(bal), ...Object.keys(ov)])) {
+      const v = ov[mv] ?? bal[mv]
+      if (typeof v === 'number') sum += v
+    }
+  }
+  return sum || null
+}

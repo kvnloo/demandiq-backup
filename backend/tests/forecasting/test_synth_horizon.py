@@ -154,11 +154,11 @@ def test_differential_growth_through_pipeline(synthetic_sandag_gdf, project_poin
 
 from pathlib import Path  # noqa: E402
 
-REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad.shp"
+REAL_SHP = Path(__file__).resolve().parents[3] / "data" / "sandag" / "hwyLoad_2025.shp"
 
 
 @pytest.mark.skipif(not REAL_SHP.exists(),
-                    reason="real SANDAG hwyLoad.shp not present (local-only)")
+                    reason="real SANDAG hwyLoad_2025.shp not present (local-only)")
 def test_real_file_smoke(tmp_path):
     """Generate a synthetic 2030 from the REAL base, ingest base + horizon, and
     confirm non-identity growth + a passing overlap/ID-stability check end-to-end.

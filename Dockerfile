@@ -31,11 +31,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Only the lean requirements. The geo stack (requirements-forecasting.txt) is
-# deliberately excluded: its imports are lazy, so the app starts without it and
-# /forecast/ingest-match returns 503 rather than crashing.
-COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# App + forecasting geo stack (pinned; pyogrio's wheels bundle GDAL, so no apt
+# packages are needed). Test-only deps live in requirements-dev.txt and stay out.
+COPY backend/requirements.txt backend/requirements-forecasting.txt ./backend/
+RUN pip install --no-cache-dir -r backend/requirements.txt -r backend/requirements-forecasting.txt
 
 COPY backend/ ./backend/
 # app.py resolves the build at ../frontend/dist relative to itself.
@@ -45,6 +44,11 @@ COPY --from=frontend /build/dist ./frontend/dist
 ENV MPLBACKEND=Agg
 # Unbuffered so logs reach the platform's log viewer immediately.
 ENV PYTHONUNBUFFERED=1
+
+# Run as an unprivileged user. The app writes only to /tmp (uploads) and, with
+# no DATABASE_URL, a local SQLite capture file in backend/.
+RUN useradd --create-home --uid 10001 app && chown -R app /app/backend
+USER app
 
 WORKDIR /app/backend
 
