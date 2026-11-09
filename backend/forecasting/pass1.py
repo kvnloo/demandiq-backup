@@ -109,6 +109,21 @@ def forecast_intersection(base_tmc, refined_approaches, *, manual_targets=None,
                                 "— held flat (no growth applied); engineer review needed."),
                 })
 
+    # NCHRP 255 p. 133: legs grown one by one no longer give in = out; scale both
+    # sides to their average total (each leg keeps its share) before Furness.
+    rows = [t for t in row_targets if t is not None]
+    cols = [t for t in col_targets if t is not None]
+    t_in, t_out = sum(rows), sum(cols)
+    if t_in > 0 and t_out > 0 and abs(t_in - t_out) > 0.01 * max(t_in, t_out):
+        total = 0.5 * (t_in + t_out)
+        row_targets = [None if t is None else t * total / t_in for t in row_targets]
+        col_targets = [None if t is None else t * total / t_out for t in col_targets]
+        flags.append({
+            "code": "PASS1-INOUT-EVENED",
+            "message": (f"traffic in ({t_in:.0f}) and out ({t_out:.0f}) differed — both set to "
+                        f"{total:.0f}, keeping each leg's share (NCHRP 255 p. 133)."),
+        })
+
     fitted, converged, iters, residual = furness_intersection(
         seed, row_targets, col_targets, present, tol=tol, max_iter=max_iter)
 

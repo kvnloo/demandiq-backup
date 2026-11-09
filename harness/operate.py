@@ -73,7 +73,7 @@ def build_balance_payload(project):
         # Same fallbacks as the UI (buildPayload's ?? defaults, verbatim).
         'link_resolution_method': balancing.get('linkResolution', 'larger'),
         'max_iterations': balancing.get('maxIterations', 100),
-        'tolerance': balancing.get('convergenceThreshold', 0.5),
+        'tolerance': (lambda t: t if t >= 0.1 else 0.5)(balancing.get('convergenceThreshold', 0.5)),   # same rule as S6: vehicles; old % values (< 0.1) mean 0.5 veh
     }
 
 

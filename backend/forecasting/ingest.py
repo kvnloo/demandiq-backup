@@ -5,7 +5,7 @@ A thin layer over the region adapters. The adapter (forecasting.adapters.sandag)
 already does the heavy lifting — CRS reprojection (4326↔2230), the spatial filter
 to the project area, and the canonical transform. This module:
 
-  1. Resolves server-side network asset paths (role → shapefile).
+  1. Picks the server-side network file for each model year.
   2. Calls the region adapter once per supplied model year.
   3. Runs a base↔horizon link_id overlap sanity check when both are present.
 
@@ -24,6 +24,10 @@ corrupting the refinement join.
 
 from pathlib import Path
 
+from forecasting import upload
+from forecasting.adapters.generic import ingest_upload
+from forecasting.adapters.hpms import ingest_hpms
+from forecasting.adapters.mtc import ingest_mtc
 from forecasting.adapters.sandag import ingest_sandag
 
 # ── Region adapter registry ───────────────────────────────────────────────────
@@ -36,38 +40,37 @@ from forecasting.adapters.sandag import ingest_sandag
 # to the project CRS, and emits a canonical NetworkLayer whose links populate the
 # fields the engine consumes (flow, length_mi, daily_total). Adding a region =
 # implement that contract and register it here — NOT editing a conditional. See
-# docs/forecasting-multicounty.md ("How to add a region"). v1 ships SANDAG only;
-# additional adapters are deferred until a concrete second model exists.
+# docs/forecasting-multicounty.md ("How to add a region"). HPMS_CA is the
+# statewide fallback: every California county, read live from FHWA (no files).
 ADAPTERS = {
     "SANDAG": ingest_sandag,
+    "HPMS_CA": ingest_hpms,
+    "MTC": ingest_mtc,        # Bay Area; file picked server-side by model year
+    "UPLOAD": ingest_upload,  # the engineer's own model file (upload id + column mapping)
 }
-
-# Server-side SANDAG network assets live under the repo's data/ dir (gitignored).
+# Server-side SANDAG network assets live under the repo's data/ dir (gitignored),
+# one file per model year: data/sandag/hwyLoad_<year>.shp. Like MTC, the file is
+# picked server-side from the model year — a client never sends a path.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SANDAG_DATA_DIR = REPO_ROOT / "data" / "sandag"
 
-# role → shapefile path. A network's year is engineer-tagged at ingest
-# (scenario_year), NOT inferred from the filename. Left unpopulated until it's
-# confirmed which file is which model year; callers pass an explicit `path` per
-# network meanwhile (e.g. tests, or the eventual ingest endpoint).
-SANDAG_ASSET_REGISTRY = {
-    # "base":    SANDAG_DATA_DIR / "hwyLoad.shp",
-    # "horizon": SANDAG_DATA_DIR / "hwyLoad.shp",
-}
+
+def sandag_years():
+    """Model years with a hwyLoad_<year>.shp on this server."""
+    return sorted(int(p.stem[len("hwyLoad_"):])
+                  for p in SANDAG_DATA_DIR.glob("hwyLoad_[0-9][0-9][0-9][0-9].shp"))
 
 
-def _resolve_path(spec):
-    """Explicit `path` wins; otherwise resolve `role` via the asset registry."""
-    path = spec.get("path")
-    if path is not None:
-        return path
-    role = spec.get("role")
-    if role in SANDAG_ASSET_REGISTRY:
-        return SANDAG_ASSET_REGISTRY[role]
-    raise ValueError(
-        f"ingest_networks: no path for network role {role!r} — pass an explicit "
-        "'path' or register it in SANDAG_ASSET_REGISTRY."
-    )
+def sandag_path(year):
+    """data/sandag/hwyLoad_<year>.shp, or ValueError listing the available years."""
+    try:
+        y = int(year)
+    except (TypeError, ValueError):
+        raise ValueError(f"model year must be a year, got {year!r}")
+    path = SANDAG_DATA_DIR / f"hwyLoad_{y}.shp"
+    if not path.exists():
+        raise ValueError(f"no SANDAG model run for {y} — available model years: {sandag_years()}")
+    return path
 
 
 def _base_horizon_overlap(base_layer, horizon_layer):
@@ -95,8 +98,11 @@ def ingest_networks(
         project_intersections_4326: iterable of {lat, lng, ...} (EPSG:4326).
         networks: list of specs, each:
             { "role": "base"|"horizon", "scenario_year": int, "path"?: shp_path }
-            `path` is optional if `role` is in SANDAG_ASSET_REGISTRY.
-        region: only "SANDAG" is built in v1.
+            `path` is for tests/tools only; without it SANDAG picks
+            data/sandag/hwyLoad_<scenario_year>.shp (the API never passes one).
+            UPLOAD specs carry "upload_id" + "mapping" instead; the uploads are
+            deleted once every layer is ingested.
+        region: a key of ADAPTERS — "SANDAG" (model file) or "HPMS_CA" (statewide, live).
         filter_radius_ft: passed through to the adapter (default 300).
         min_overlap: minimum base→horizon link_id overlap fraction required when
             both roles are present (default 0.5). Below it → fail loud.
@@ -106,7 +112,7 @@ def ingest_networks(
 
     Raises:
         ValueError: region with no registered adapter, empty networks, missing
-            role/scenario_year, duplicate role, unresolvable path, or base↔horizon
+            role/scenario_year, duplicate role, no model file for the year, or base↔horizon
             overlap below min_overlap.
     """
     adapter = ADAPTERS.get(region)
@@ -127,10 +133,15 @@ def ingest_networks(
             raise ValueError(f"ingest_networks: duplicate network role {role!r}")
         if "scenario_year" not in spec:
             raise ValueError(f"ingest_networks: network role {role!r} missing 'scenario_year'")
-        path = _resolve_path(spec)
+        kw = {}
+        if region == "UPLOAD":
+            path = upload.resolve(spec.get("upload_id"))
+            kw["mapping"] = upload.check_mapping(spec.get("mapping"), upload.fields_of(spec["upload_id"]))
+        else:
+            path = spec.get("path") or (sandag_path(spec["scenario_year"]) if region == "SANDAG" else "live")
         layers[role] = adapter(
             path, spec["scenario_year"], project_intersections_4326,
-            filter_radius_ft=filter_radius_ft,
+            filter_radius_ft=filter_radius_ft, **kw,
         )
 
     if "base" in layers and "horizon" in layers:
@@ -143,4 +154,7 @@ def ingest_networks(
                 "between series). Refinement joins by link_id and would be unreliable."
             )
 
+    if region == "UPLOAD":   # the clipped layers are what the project keeps
+        for spec in networks:
+            upload.delete(spec.get("upload_id"))
     return layers

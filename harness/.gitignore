@@ -7,3 +7,7 @@ last_session.json
 runs/
 failures/
 __pycache__/
+forecast_scores.csv
+method_compare.csv
+method_compare_movements.json
+method_anomalies.html

@@ -86,6 +86,40 @@ tool, tracked as an open ledger signature — it is NOT known-correct behavior,
 but a future Mechanic should expect the root cause at the rounding boundary,
 not in the movement mapping.
 
+## RECON-ADJUST discloses large raw→balanced adjustments (Fix 1, disclosure only)
+
+`/balance-nchrp` emits a `RECON-ADJUST` qc_flag for every movement whose
+balanced value moved far from its raw count: **|balanced − raw| ≥ 30 veh AND
+GEH(balanced, raw) ≥ 5** — both must hold, so small movements don't spam.
+It covers both directions (inflation and reduction; the reduction side
+complements the known drop-below-raw NCHRP behavior above, it does not
+replace it). The message carries raw → balanced, signed percent, the
+GEH-vs-raw, and the direction word.
+
+The canonical trigger is the silent through-inflation class diagnosed in
+`diagnosis-through-inflation.md`: at a T-intersection the corridor through is
+the only cell shared by both adjacent link constraints, so accumulated link
+disagreement lands on it (e.g. seed 34093 PM int 7 WBT raw 50 → balanced
+210) while post-round link conservation closes exactly and every other check
+stays green. RECON-ADJUST is **disclosure only** — the balanced numbers are
+byte-identical with or without it, and the Grader still FAILs those runs on
+GEH-vs-key; the accuracy question is a separate fix. A `RECON-ADJUST` flag
+is therefore *expected* on runs hitting the through-inflation signatures —
+its absence on such a run would be the regression.
+
+## Forger corpus firewall — synthetic sheets must NEVER train the extractor
+
+Every Forger-generated PDF (`harness/forger/`) carries
+`forger-synthetic=true` in its PDF metadata (Subject and Keywords). The
+rule: **Forger sheets must never enter any extraction fine-tuning or
+reference-example corpus** (`backend/training_data.jsonl`, the labeling
+pipeline in `backend/tools/populate_labels.py`, or any future corpus) — a
+model must not be trained on its own exam, or every Forger verdict
+afterwards measures memorization instead of extraction. Anyone bulk-adding
+PDFs to a corpus must check the metadata marker first. The Forger's runs/
+and failures/ artifact dirs are gitignored, which also keeps synthetic
+sheets from being casually harvested.
+
 ## Empty-period payloads crash the endpoint (pre-existing defect, not harness scope)
 
 `/balance-nchrp` 500s (KeyError in `balance_leg_totals`) when a period has

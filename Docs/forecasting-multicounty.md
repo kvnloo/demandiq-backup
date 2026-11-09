@@ -178,3 +178,73 @@ It must:
 
 Then **register it** in `ingest.py`'s adapter registry under the region key. No
 other engine code should need to change for a SANDAG-shaped model.
+
+## Regions now registered
+
+- **SANDAG** — San Diego; engineer names the `hwyLoad` file under `data/sandag/`.
+- **MTC** — Bay Area, all nine counties. MTC Travel Model One, Plan Bay Area 2050
+  runs: 2015 base (`pba50-2015-TM152-IPA-17`) and 2050 Final Blueprint
+  (`pba50-2050-TM152-FBP-Plus-24`), file `avgload5period.zip` from MTC's public
+  Box shares (mtcdrive.box.com/v/<name>). Unzip to `data/mtc/<year>/`
+  (gitignored, ~100 MB each). The server picks the file by model year; clients
+  never send a path. TM1 periods: AM 6–10 am, PM 3–7 pm.
+- **HPMS_CA** — statewide FHWA HPMS, backend only. Its `future_aadt` is a flat
+  ~×1.105 statewide factor, not a model forecast — don't present it as one.
+
+## Method rules (NCHRP 255/765), as built
+
+- Model volumes are interpolated per link to the count year and the horizon year
+  before growth is computed (NCHRP 765 §9.2). Horizon may be count year … +50;
+  more than 5 years past the model runs is flagged as extrapolated.
+- Declines are allowed with no floor (user decision); they are flagged, as is
+  growth ≥ 3 %/yr.
+- Negative difference result → ratio result (NCHRP 255 p. 50). Zero model base
+  with K → difference (p. 54). Lane change > 25 % → flag (p. 54).
+- `nchrp765` method picks per leg by count ÷ model (Table 6-2, limits 0.5 / 2.0).
+- Pass 1 evens traffic in = out before Furness (NCHRP 255 p. 133).
+- Reported forecasts round per NCHRP 765 Table 4-8 (10 / 50 / 100 / 500 / 1,000);
+  `balanced_unrounded` keeps the 5-vph values, which VMT uses.
+
+## Method choices (two questions)
+
+1. **How each road grows** (`refine_method`): ratio, difference, combined
+   (NCHRP 255 average), weighted, modified_average, nchrp765, odot — all from
+   the model — or `trend` (fit of past counts) / `rate` (engineer's %/yr), which
+   need no model (`layers` may be null).
+2. **How road forecasts become turns** (`turn_method`): `furness` (Pass 1 +
+   Pass 2, the NCHRP standard), `fratar` (corridor trip table grown to end and
+   side-street totals), `fuzzy` (Fratar table nudged so every leg is within
+   ±`fuzzy_band_pct` of its forecast). Trip methods need one straight corridor
+   (`forecasting/od.py`).
+
+Benchmark with a known answer: `python -m forecasting.benchmark out.json 20
+../frontend/public/methods-guide.html` rebuilds the results tables in the
+in-app guide (`/methods-guide.html`).
+
+---
+
+## The engineer's own model file (region `UPLOAD`) — BUILT
+
+Any MPO's loaded highway network, uploaded per project instead of a server file.
+
+1. `POST /forecast/upload-network` (multipart `files` = a .zip, or the .shp/.shx/.dbf/.prj[/.cpg]
+   parts, or one .gpkg / .geojson; optional `intersections` JSON). Streamed to a private temp
+   dir (`$TMPDIR/demandiq-uploads/<random token>/layer.<ext>` — client file names never reach
+   the filesystem; zip member paths are ignored). Checks: line geometry, a CRS (.prj required),
+   readable. Reads only the schema + 5 rows. Returns `upload_id`, feature count, CRS, WGS84
+   bounds, `intersections_outside`, fields (type + one sample), distinct values of the class
+   column, and a guessed `mapping` with `confidence` per role (`forecasting/upload.py`:
+   SANDAG / MTC exact schemas first, then name heuristics). Cap: 500 MB request
+   (`MAX_NETWORK_UPLOAD_BYTES`, app.py middleware), 1 GB unzipped. TTL 2 h, cleaned lazily.
+2. `POST /forecast/ingest-match` with `region: "UPLOAD"` and
+   `networks: [{role, scenario_year, upload_id, mapping}]` → `adapters/generic.py` reads a padded
+   bbox, applies the mapping (two-way AB/BA columns, or one-way records paired like MTC; node
+   ids from columns or from rounded end points), drops connector values, reprojects to 4326.
+   Same `NetworkLayer` as SANDAG/MTC; the engine is unchanged. Uploads are deleted after a
+   successful ingest — the clipped layers are what the project keeps.
+
+Mapping roles: `am_ab` (required), `am_ba`, `pm_ab`, `pm_ba`, `from_node`, `to_node`, `link_id`,
+`daily` (both directions), `length_mi`, `name`, `lanes_ab`, `lanes_ba`, `fclass`,
+`connector_field` + `connector_values`. Cube `.net` binaries can't be read — export the loaded
+network to a shapefile. Equivalence with the built-in SANDAG adapter is pinned by
+`tests/forecasting/test_upload_network.py` on clipped real 2025/2050 fixtures.

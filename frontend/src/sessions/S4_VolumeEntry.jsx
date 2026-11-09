@@ -17,6 +17,7 @@ import VolumeGrid from '../components/VolumeGrid'
 import { matchAgentToProject } from '../lib/matching'
 import { parseBulkVolumes, applyParsedRows, MOVEMENT_CODES } from '../lib/bulkPaste'
 
+import { friendlyError } from '../lib/apiError'
 import '../styles/forms.css'
 import '../styles/map.css'         // .di-modal*, .di-banner, .di-btn-secondary, .di-btn-primary
 import '../styles/volumes.css'
@@ -122,7 +123,8 @@ export default function S4_VolumeEntry() {
       setFiles((prev) =>
         prev.map((f) => {
           if (f.status !== 'processing') return f
-          if (errMap.has(f.name)) return { ...f, status: 'error', error: errMap.get(f.name) }
+          // The parser's own message (e.g. pypdf "No /Root object!") means nothing to an engineer.
+          if (errMap.has(f.name)) return { ...f, status: 'error', error: "Couldn't read this file — check it is a turning-movement count report (PDF, Excel or CSV) and not damaged." }
           return { ...f, status: 'done' }
         })
       )
@@ -163,6 +165,30 @@ export default function S4_VolumeEntry() {
         applyExtractedVolumes(projectId, agentInts[agentIdx])
       }
 
+      // Jev suggestions for the names token matching couldn't place — only the
+      // project intersections nobody claimed are offered. Suggest-only: the
+      // engineer still clicks Apply. Any failure → no suggestion, as before.
+      const unmatchedIdx = agentInts.map((_, i) => i).filter((i) => !projectIdByAgentIdx.has(i))
+      const freeInts = projectInts.filter((it) => !(it.id in matches))
+      const suggestedPid = new Map()
+      if (unmatchedIdx.length && freeInts.length) {
+        try {
+          const r = await fetch('/api/suggest-matches', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              names: unmatchedIdx.map((i) => agentInts[i].name || ''),
+              candidates: freeInts.map((it) => it.name),
+            }),
+          })
+          const j = r.ok ? await r.json() : null
+          j?.suggestions?.forEach((s, k) => {
+            const it = s && freeInts.find((x) => x.name === s.choice)
+            if (it) suggestedPid.set(unmatchedIdx[k], { pid: it.id, p: s.p })
+          })
+        } catch { /* Jev is optional — the dropdown still works */ }
+      }
+
       // Add every extracted block to the buffer, stamped with auto-match result
       const newExtracted = agentInts.map((ag, idx) => {
         const matchedPid = projectIdByAgentIdx.get(idx) ?? null
@@ -171,17 +197,17 @@ export default function S4_VolumeEntry() {
           payload: ag,
           appliedTo: matchedPid,
           autoMatchFailed: matchedPid == null,
+          suggestion: suggestedPid.get(idx) ?? null,
           dismissed: false,
         }
       })
       setExtracted((prev) => [...prev, ...newExtracted])
     } catch (err) {
-      setExtractError(
-        `Extraction failed: ${err.message}. Make sure the backend is running at localhost:8000 (cd backend && python3.12 app.py).`
-      )
+      const msg = friendlyError(err)
+      setExtractError(`Couldn't read the count files. ${msg}`)
       setFiles((prev) =>
         prev.map((f) =>
-          f.status === 'processing' ? { ...f, status: 'error', error: err.message } : f
+          f.status === 'processing' ? { ...f, status: 'error', error: msg } : f
         )
       )
     } finally {
@@ -335,6 +361,7 @@ export default function S4_VolumeEntry() {
                 <UnmatchedRow
                   key={e.id}
                   agent={e.payload}
+                  suggestion={e.suggestion}
                   intersections={intersections}
                   onApply={(pid) => applyBufferedExtraction(e.id, pid)}
                   onDismiss={() => dismissExtraction(e.id)}
@@ -565,8 +592,8 @@ function BulkPasteModal({ intersections, onClose }) {
 }
 
 // ── Single unmatched row with a per-row "selected target" choice ────────
-function UnmatchedRow({ agent, intersections, onApply, onDismiss }) {
-  const [target, setTarget] = useState('')
+function UnmatchedRow({ agent, suggestion, intersections, onApply, onDismiss }) {
+  const [target, setTarget] = useState(suggestion?.pid ?? '')
   return (
     <div className="di-vol-unm">
       <div>
@@ -574,6 +601,11 @@ function UnmatchedRow({ agent, intersections, onApply, onDismiss }) {
         <div className="di-vol-unm__source">
           {agent.vendorDetected || 'Unknown vendor'} · {agent.sourceFile || ''}
         </div>
+        {suggestion && target === suggestion.pid && (
+          <div className="di-vol-unm__source">
+            Suggested by Jev · {Math.min(99, Math.round(suggestion.p * 100))}% likely — check, then Apply
+          </div>
+        )}
       </div>
       <select
         className="di-vol-unm__select"

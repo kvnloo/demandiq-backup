@@ -94,3 +94,25 @@ export function incompleteStopControls(intersections) {
     })
     .map((it) => ({ id: it.id, num: it.num, control: it.control }))
 }
+
+// ── 3-leg intersections ─────────────────────────────────────────────────────
+// A 3-leg intersection has exactly one approach that does not exist. The
+// engineer names it (S2 "Missing approach"); every other leg is restored with a
+// default lane if it had been removed. dir=null → all four exist (4-leg).
+export function withMissingLeg(approaches, dir) {
+  return Object.fromEntries(ACTIVE_DIRS.map((d) => {
+    const ap = approaches?.[d] ?? { exists: true, lanes: [{ movement: 'T' }], stopControlled: false }
+    if (d === dir) return [d, { ...ap, exists: false, lanes: [], stopControlled: false }]
+    return [d, ap.exists === false ? { ...ap, exists: true, lanes: [{ movement: 'T' }] } : ap]
+  }))
+}
+
+export const missingLeg = (approaches) => ACTIVE_DIRS.find((d) => approaches?.[d]?.exists === false) ?? null
+
+// 3-leg pins whose missing approach hasn't been chosen yet — blocks S2 Continue.
+export function incompleteThreeLegs(intersections) {
+  if (!Array.isArray(intersections)) return []
+  return intersections
+    .filter((it) => it?.legs === '3-leg' && !missingLeg(it.approaches))
+    .map((it) => ({ id: it.id, num: it.num }))
+}

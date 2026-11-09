@@ -557,3 +557,6 @@
   color: var(--text-tertiary);
   font-style: italic;
 }
+
+/* Per-link table without the old (unused) threshold column. */
+.di-s5-link--2col { grid-template-columns: 1fr 130px; }

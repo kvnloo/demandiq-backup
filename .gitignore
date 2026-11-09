@@ -9,6 +9,9 @@ frontend/dist/
 
 # Forecasting: SANDAG network data (hwyLoad.dbf is ~93 MB — never commit)
 data/sandag/
+# Forecasting: HPMS service cache (re-downloadable)
+data/hpms/
+data/mtc
 # Forecasting: isolated geo-deps virtualenv (geopandas/GDAL — dev/test only)
 backend/.venv-forecasting/
 

@@ -45,11 +45,15 @@ def test_balance_future_corridor_invariants(corridor):
             assert v >= 0
             assert v % 5 == 0, f"{v} not a multiple of 5"
 
-    # #1 every Full link conserves exactly after reconciliation.
+    # #1 Full links conserve on the UNROUNDED balance (Table 4-8 rounds once,
+    # afterwards); any leftover IPF imbalance > 0.5 veh is flagged, never silent.
     full = [c for c in res["link_conservation"] if c["mode"] == "Full"]
     assert full, "expected Full links in a corridor"
+    flagged = {f["message"].split()[1] for f in res["qc_flags"]
+               if f.get("check") in ("NCHRP-LINK-DELTA", "NCHRP-LINK-NOLEG")}
     for c in full:
-        assert c["delta"] == 0, f"link {c['fromNum']}->{c['toNum']} delta {c['delta']}"
+        assert abs(c["delta"]) <= 0.5 or f"{c['fromNum']}→{c['toNum']}" in flagged, \
+            f"link {c['fromNum']}->{c['toNum']} delta {c['delta']} not flagged"
 
     # #6 the conservation graph edges are EXACTLY the given links — never
     # reconnected by sorted intersection number.

@@ -291,7 +291,7 @@ def test_operator_payload_matches_ui_shape(gen):
     assert set(payload) == {'intersections', 'unbalanced_volumes', 'links',
                             'link_resolution_method', 'max_iterations', 'tolerance'}
     assert payload['link_resolution_method'] == 'larger'
-    assert payload['tolerance'] == 0.01
+    assert payload['tolerance'] == 0.5   # puzzler's 0.01 is an old % value; the UI (S6) sends 0.5 veh for it
     assert payload['max_iterations'] == 500
     assert all(set(l) == {'fromNum', 'toNum', 'direction', 'mode'}
                for l in payload['links'])

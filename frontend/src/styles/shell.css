@@ -76,6 +76,11 @@ a.di-step:hover { background: var(--surface-2); }
   filter: invert(.9) hue-rotate(180deg);
 }
 
+/* RunStatusBanner (S6–S8): stale results / not-balanced notice. */
+.di-run-banner { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 13px; line-height: 1.4; }
+.di-run-banner > span { flex: 1; }
+.di-run-banner a { text-decoration: none; }
+
 @media (max-width: 920px) {
   /* Phone/tablet: the rail becomes a horizontal step strip above the stage. */
   .di-app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
@@ -86,6 +91,31 @@ a.di-step:hover { background: var(--surface-2); }
   .di-stage { padding: 16px; }
   .di-step::after { display: none; }
 }
+/* Print (S6–S8 reports): white paper, dark ink, no app chrome. The day
+   palette is forced whatever the screen theme; diagrams print as their
+   original white PNGs (the dark theme's invert is undone); the page flows to
+   full length instead of printing only the visible scroll box. */
+@media print {
+  :root, :root[data-theme] {
+    --bg-base: #fff; --bg-deep: #fff; --bg-elevated: #fff; --bg-hover: transparent; --surface: #fff;
+    --text-primary: #000; --text-secondary: #222; --text-tertiary: #444;
+    --border: #bbb; --border-strong: #888; --accent: #1F5FAD; --accent-glow: transparent;
+    color-scheme: light;
+  }
+  html, body, #root { background: #fff !important; color: #000; }
+  .di-top, .di-rail, .di-run-banner button, .di-run-banner a,
+  [class*="__footer"], .di-s7r__map, .di-s7__right, .leaflet-container { display: none !important; }
+  .di-shell, .di-app, .di-stage, [class*="__body"], [class*="__inner"] { height: auto !important; overflow: visible !important; }
+  .di-app { display: block !important; }
+  .di-stage { padding: 0 !important; }
+  .di-stage > * { animation: none !important; margin: 0 !important; height: auto !important; }
+  /* Screen colours are tuned for dark surfaces (pale amber, mint…); on paper
+     every label prints dark. Deltas and failures keep their red/green. */
+  .di-stage *:not([class*="delta"]):not([class*="--fail"]):not([class*="--ok"]) { color: #111 !important; }
+  :root[data-theme] :is(.di-s7-card__img, .di-rm__anchor img, .di-fc-fig img, .di-s8-corridor-preview__fig img) { filter: none !important; }
+  * { box-shadow: none !important; text-shadow: none !important; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .di-stage > *, .di-step.active .di-lamp { animation: none; }
 }

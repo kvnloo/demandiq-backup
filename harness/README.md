@@ -137,3 +137,32 @@ No Mechanic/auto-fix (Phase 2). No UI driving. No ±30% perturbation tier,
 no missing individual movements on present legs, no AM+PM dual-period
 consistency checks, no forecasting coverage. (v2 added: difficulty tiers
 with long corridors and T-intersections; `goldens/` now pins Tier A.)
+
+
+## Forecast track (tiers FA / FB / FC)
+
+About 25 % of loop runs (`--forecast-share`, default 0.25; 0 turns it off) test
+**forecasting** instead of balancing. `forecast_puzzler.py` builds a corridor
+whose true future is known (a trip table grown per scenario), hands the tool
+only today's counts and a regional model, and `forecast_runner.py` grades the
+answer against two targets:
+
+1. **The textbook answer** (`forecast_oracle.py`, re-derived from NCHRP 255 /
+   765, not imported from the backend). A mismatch is a FAIL:
+   `forecast-link-math` (ratio / difference / average + year interpolation),
+   `forecast-turn-math` (Furness to the leg totals), `forecast-invariant`
+   (≥ 0, Table 4-8 rounding, roads conserve). Tier FA has a perfect model, so
+   its link step must equal the true future exactly.
+2. **The hidden true future.** How close the forecast lands is a score
+   (`forecast_scores.csv`: share within GEH 5, movement error %), shown in the
+   Telegram checkpoint per method. A MARGINAL only in FA.
+
+| Tier | Model | Counts | Extra |
+|---|---|---|---|
+| FA | perfect (∝ truth, linear in time) | exact | ratio / difference / average |
+| FB | ±25 % per link, growth ±8 % | ±5 %, balanced by the tool | all 7 link methods |
+| FC | as FB | as FB | declines, new development, odd model years, 3–7 intersections |
+
+Repro: `python -m harness.run_one --seed N --tier FA`. Proof the grader bites:
+planting a 3 % ratio error, skipping year interpolation, skipping in = out, or
+a wrong rounding step each turned clean 30/30 passes into FAILs (Nov 2026).

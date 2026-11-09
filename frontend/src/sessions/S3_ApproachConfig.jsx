@@ -9,6 +9,7 @@ import {
   setApproaches,
   isIntersectionConfigured,
   defaultApproaches,
+  markApproachesReviewed,
 } from '../store/projectStore'
 import MovementSvg from '../components/MovementSvg'
 import MovementPickerModal from '../components/MovementPickerModal'
@@ -118,7 +119,7 @@ export default function S3_ApproachConfig() {
 
   const goPrev = () => !isFirst && setActiveId(intersections[activeIdx - 1].id)
   const goNext = () => !isLast && setActiveId(intersections[activeIdx + 1].id)
-  const goVolumes = () => navigate('/volumes')
+  const goVolumes = () => { markApproachesReviewed(); navigate('/volumes') }
 
   return (
     <div className="di-s3">

@@ -164,11 +164,17 @@ def ingest_sandag(
             "cannot scope the network."
         )
 
-    gdf = gpd.read_file(shp_path)
-    source_epsg = gdf.crs.to_epsg() if gdf.crs else None
-    if source_epsg is None:
-        source_epsg = DEFAULT_SOURCE_EPSG
-        gdf = gdf.set_crs(DEFAULT_SOURCE_EPSG)
+    # Spatial read: only rows near the project (the full ~100 MB DBF costs ~250 MB
+    # RAM and 10+ s). The pad covers links whose endpoint is in range.
+    import pyogrio
+    src_crs = pyogrio.read_info(shp_path).get("crs") or f"EPSG:{DEFAULT_SOURCE_EPSG}"
+    sp = gpd.GeoSeries([Point(lng, lat) for (lng, lat) in pts], crs=PROJECT_EPSG).to_crs(src_crs)
+    pad = filter_radius_ft * 1.2 + 100   # source CRS is US feet (EPSG:2230)
+    minx, miny, maxx, maxy = sp.total_bounds
+    gdf = gpd.read_file(shp_path, bbox=(minx - pad, miny - pad, maxx + pad, maxy + pad))
+    if gdf.crs is None:
+        gdf = gdf.set_crs(src_crs)
+    source_epsg = gdf.crs.to_epsg() or DEFAULT_SOURCE_EPSG
 
     # Project points → source CRS (feet) so the radius is measured in real feet.
     proj_pts = gpd.GeoDataFrame(

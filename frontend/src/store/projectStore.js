@@ -11,6 +11,8 @@
 //     // intersections, volumes, balancing, results, ...   (later sessions)
 //   }
 
+import { volumeError } from '../lib/bulkPaste.js'
+
 const STORAGE_KEY = 'demandiq:project'
 
 let _snapshot = null
@@ -504,6 +506,16 @@ export function setCorridorDir(dir) {
   _emit()
 }
 
+// The engineer confirmed S3 (Continue to volume entry). Approaches are seeded
+// with defaults at pin creation, so "configured" alone doesn't mean reviewed.
+export function markApproachesReviewed() {
+  if (!_initialized) _initSnapshot()
+  if (_snapshot.analysis?.approachesReviewed) return
+  _snapshot = { ..._snapshot, analysis: { ...(_snapshot.analysis ?? {}), approachesReviewed: true } }
+  _persist()
+  _emit()
+}
+
 // ── S3 approach configuration ─────────────────────────────────────────────────
 // Canonical approach shape. `exists` gates whether the leg is present, `lanes`
 // holds its movement config, and `stopControlled` flags it as stop-sign-
@@ -741,7 +753,7 @@ export function ensureBalancingDefaults() {
     peakMode: cur.peakMode ?? 'Corridor',
     amWindow: cur.amWindow ?? { start: '07:00', end: '09:00' },
     pmWindow: cur.pmWindow ?? { start: '16:00', end: '18:00' },
-    convergenceThreshold: cur.convergenceThreshold ?? 0.01,
+    convergenceThreshold: cur.convergenceThreshold >= 0.1 ? cur.convergenceThreshold : 0.5,   // veh
     // Stage 4c: IPF default — converges via matrix stability on imbalanced
     // targets, which can take more iterations than the old residual-to-target
     // criterion. 500 is comfortable headroom for branching corridors.
@@ -766,28 +778,25 @@ export function setBalancedVolumes(intersectionId, period, balanced) {
 }
 
 // Bulk: write one /balance response's `balanced.{AM,PM}` into every matching
-// intersection by num. One write, one emit.
+// intersection by num. One write, one emit. A run REPLACES all balanced
+// volumes: a period or intersection the run did not return is cleared, so no
+// numbers from an older run survive next to the new ones.
 export function applyBalancedRun(balancedByPeriod) {
   const list = getIntersections().map((it) => {
-    const merged = { ...(it.balanced ?? {}) }
-    let touched = false
+    const next = {}
     for (const period of ['AM', 'PM']) {
-      const periodData = balancedByPeriod?.[period]
-      if (!periodData) continue
-      const periodBalanced = periodData[String(it.num)]
-      if (periodBalanced) {
-        merged[period] = periodBalanced
-        touched = true
-      }
+      const periodBalanced = balancedByPeriod?.[period]?.[String(it.num)]
+      if (periodBalanced) next[period] = periodBalanced
     }
-    return touched ? { ...it, balanced: merged } : it
+    return { ...it, balanced: next }
   })
   setIntersections(list)
 }
 
 export function setLastRun(runResult) {
   if (!_initialized) _initSnapshot()
-  const analysis = { ...(_snapshot.analysis ?? {}), lastRun: runResult }
+  // Fingerprint the inputs the run was built from, so later edits flag it stale.
+  const analysis = { ...(_snapshot.analysis ?? {}), lastRun: runResult, runInputSig: runInputSignature(_snapshot) }
   _snapshot = { ..._snapshot, analysis }
   _persist()
   _emit()
@@ -795,6 +804,37 @@ export function setLastRun(runResult) {
 
 export function getLastRun() {
   return getSnapshot().analysis?.lastRun ?? null
+}
+
+// What a run's results depend on outside balancing settings: which
+// intersections exist (id + num), every entered count, and the link topology.
+// Settings changes are reported separately by S6's configDiff.
+export function runInputSignature(snap) {
+  const ints = (snap?.intersections ?? []).map((it) => [
+    it.id, it.num,
+    ['AM', 'PM'].map((p) => Object.entries(it.volumes?.[p] ?? {})
+      .map(([mv, c]) => `${mv}=${c?.value}`).sort().join(',')),
+  ]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+  const links = (snap?.links ?? []).map((l) => `${l.fromId}>${l.toId}:${l.direction}`).sort()
+  return JSON.stringify([ints, links])
+}
+
+function _hasBalanced(snap) {
+  return (snap?.intersections ?? []).some(
+    (it) => Object.keys(it.balanced?.AM ?? {}).length > 0 || Object.keys(it.balanced?.PM ?? {}).length > 0,
+  )
+}
+
+// True when balanced results exist but no longer match the counts/intersections
+// they were computed from: counts edited, an intersection added/removed/renumbered,
+// or links changed. A removal clears lastRun (reconcileDependents) but leaves
+// balanced numbers behind, so balanced-without-a-run is stale too. Runs saved
+// before the fingerprint existed (no runInputSig) are trusted.
+export function isResultsStale(snap = getSnapshot()) {
+  if (!_hasBalanced(snap)) return false
+  if (!snap.analysis?.lastRun) return true
+  const sig = snap.analysis.runInputSig
+  return sig != null && sig !== runInputSignature(snap)
 }
 
 // ── S7 results view (period + viewMode persistence) ───────────────────────────
@@ -840,12 +880,8 @@ export function setForecasting(partial) {
 // balanced volumes. Mirrors S8's hasAnyBalanced guard — the true "analysis done"
 // signal, robust to lastRun being cleared by reconcileDependents.
 export function isExistingAnalysisDone() {
-  const ints = getSnapshot().intersections ?? []
-  return ints.some(
-    (it) =>
-      (it.balanced?.AM && Object.keys(it.balanced.AM).length > 0) ||
-      (it.balanced?.PM && Object.keys(it.balanced.PM).length > 0)
-  )
+  const snap = getSnapshot()
+  return _hasBalanced(snap) && !isResultsStale(snap)
 }
 
 // ── Original API (preserved) ──────────────────────────────────────────────────
@@ -872,11 +908,53 @@ export function clearProject() {
   _emit()
 }
 
-// TODO (later session): implement .demandiq.json download/upload via Blob + File API.
-export function exportProjectFile() {
-  throw new Error('exportProjectFile: not implemented yet')
+// Download the whole project as <name>.demandiq.json (what importProjectFile reads).
+export function exportProjectFile(filename = 'project') {
+  const blob = new Blob([JSON.stringify(getSnapshot(), null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${filename}.demandiq.json`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
 }
 
-export function importProjectFile() {
-  throw new Error('importProjectFile: not implemented yet')
+// Why a parsed .demandiq.json can't be opened, or null when it can. Checks the
+// shape every screen relies on; unknown extra fields are kept as-is.
+export function projectFileError(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return 'This is not a DemandIQ project file.'
+  if (!data.project && !data.intersections) return 'This is not a DemandIQ project file (no project details or intersections).'
+  if (data.project != null && typeof data.project !== 'object') return 'The project details in this file are damaged.'
+  const ints = data.intersections ?? []
+  if (!Array.isArray(ints)) return 'The intersections in this file are damaged.'
+  const ids = new Set()
+  for (const it of ints) {
+    if (!it || typeof it !== 'object' || typeof it.id !== 'string' || !Number.isInteger(it.num)) {
+      return 'An intersection in this file is missing its id or number.'
+    }
+    if (ids.has(it.id)) return `Intersection ${it.num} appears twice in this file.`
+    ids.add(it.id)
+    for (const p of ['AM', 'PM']) {
+      for (const [mv, c] of Object.entries(it.volumes?.[p] ?? {})) {
+        if (volumeError(c?.value)) return `Intersection ${it.num} ${p} ${mv} has an invalid count (${c?.value}).`
+      }
+    }
+  }
+  if (data.links != null && !Array.isArray(data.links)) return 'The links in this file are damaged.'
+  return null
+}
+
+// Replace the current project with the contents of a .demandiq.json File.
+// Resolves to null on success, or a plain-language reason it was refused (the
+// current project is left untouched).
+export async function importProjectFile(file) {
+  let data
+  try { data = JSON.parse(await file.text()) } catch { return 'This file is not a DemandIQ project file (it could not be read as JSON).' }
+  const err = projectFileError(data)
+  if (err) return err
+  _clearHistory()
+  saveProject(reconcileDependents(data).state)
+  return null
 }

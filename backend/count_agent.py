@@ -467,9 +467,8 @@ def extract(filepath, api_key, vendor_hint=None):
     # failing — looks like a complete answer with intersections missing).
     if msg.stop_reason == "max_tokens":
         raise ValueError(
-            f"Extraction response was truncated at max_tokens ({MAX_TOKENS}). "
-            f"File is too large for one pass — raise MAX_TOKENS or split the file. "
-            f"Usage: input={msg.usage.input_tokens}, output={msg.usage.output_tokens}."
+            "This file has too many count sheets to read in one pass. Split it "
+            "into smaller files (a few intersections each) and upload them again."
         )
 
     text = msg.content[0].text.strip()
@@ -483,10 +482,9 @@ def extract(filepath, api_key, vendor_hint=None):
     try:
         result = json.loads(text)
     except json.JSONDecodeError as e:
-        debug = Path(filepath).stem + "_DEBUG.txt"
-        with open(debug, "w", encoding="utf-8") as f:
-            f.write(f"stop_reason: {msg.stop_reason}\ntokens: {msg.usage}\n\n{text}")
-        raise ValueError(f"JSON parse failed ({e}). Debug: {debug}")
+        print(f"  (extraction reply was not valid JSON: {e}; stop_reason={msg.stop_reason})")
+        raise ValueError("The counts in this file could not be read reliably. "
+                         "Try again, or enter the counts by hand.")
 
     result["source_file"] = Path(filepath).name
     result["file_type"] = ftype
