@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import { Loader2, DownloadCloud, RotateCw } from 'lucide-react'
 
 import {
@@ -51,12 +52,6 @@ export default function F2_NetworkMatch() {
   const [error, setError] = useState(null)       // { kind:'geo'|'generic', detail }
   const [activeNum, setActiveNum] = useState(() => matches?.[0]?.intersection_num ?? null)
 
-  // Self-guard: forecasting needs existing balanced TMCs.
-  useEffect(() => {
-    if (gateOpen) return
-    const t = setTimeout(() => navigate('/results'), 1200)
-    return () => clearTimeout(t)
-  }, [gateOpen, navigate])
 
   // activeNum is seeded from the persisted slice (useState init) and set by the
   // pull handler, so no sync effect is needed. Fall back to the first match if a
@@ -123,7 +118,12 @@ export default function F2_NetworkMatch() {
       <div className="di-page di-fc">
         <div className="di-eyebrow">Forecasting · Step 2</div>
         <h1 className="di-h1">Network match</h1>
-        <p className="di-subtitle">Balance the existing volumes first. Redirecting…</p>
+        <NeedsStep
+          title="Balance the existing volumes first"
+          body="Forecasting grows the balanced base-year counts."
+          to="/analysis"
+          label="Go to Run Analysis"
+        />
       </div>
     )
   }

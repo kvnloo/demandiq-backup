@@ -16,9 +16,10 @@
 
 .di-h1 {
   font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 28px;
-  letter-spacing: -0.01em;
+  font-weight: 900;   /* Signal Flow display: heavy highway-gothic headline, as CrashIQ */
+  font-size: clamp(30px, 3.2vw, 40px);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
   color: var(--text-primary);
   margin: 8px 0 6px;
 }
@@ -127,9 +128,9 @@
 }
 
 .di-pill--selected {
-  background: var(--accent);
-  color: #ffffff;
-  border-color: var(--accent);
+  background: var(--sel-bg);
+  color: var(--fg);
+  border-color: var(--sel-ring);
 }
 
 /* ── Primary button ──────────────────────────────────────────────────────── */
@@ -173,10 +174,10 @@
   padding: 0 24px;
   border-radius: 8px;
   border: none;
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--go);   /* Signal Flow: the primary action is the green light */
+  color: var(--on-go);
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 800;
   font-size: 14px;
   cursor: pointer;
   transition: opacity 120ms, transform 80ms;
@@ -195,149 +196,28 @@
   cursor: not-allowed;
 }
 
-/* ── Appearance / theme picker (Phase 5) ─────────────────────────────────── */
-/* S1 trigger row — shows the active theme + a "Change" affordance. */
-.di-appearance-trigger {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 56px;
-  padding: 0 14px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 120ms, border-color 120ms;
-}
-
-.di-appearance-trigger:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
-}
-
-.di-appearance-trigger__label {
-  flex: 1;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.di-appearance-trigger__action {
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-/* Modal — slightly narrower than the default 560px form modal. */
-.di-modal--theme {
-  width: 460px;
-}
-
-.di-theme-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.di-theme-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 120ms, border-color 120ms, box-shadow 120ms;
-}
-
-.di-theme-card:hover:not(.di-theme-card--selected) {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
-}
-
-.di-theme-card--selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
-}
-
-/* Self-illustrating swatch — each card paints its OWN palette (inline styles
-   from theme.js), so the colors don't follow the active theme. */
-.di-theme-card__swatch {
-  position: relative;
-  height: 64px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.di-theme-card__swatch--sm {
-  height: 32px;
-  width: 44px;
-  flex-shrink: 0;
-}
-
-.di-theme-card__surface {
-  position: absolute;
-  left: 10px;
-  top: 12px;
-  right: 10px;
-  height: 14px;
-  border-radius: 4px;
-}
-
-.di-theme-card__swatch--sm .di-theme-card__surface {
-  left: 5px;
-  top: 6px;
-  right: 5px;
-  height: 8px;
-}
-
-.di-theme-card__accent {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  width: 28px;
-  height: 8px;
-  border-radius: 4px;
-}
-
-.di-theme-card__swatch--sm .di-theme-card__accent {
-  left: 5px;
-  bottom: 5px;
-  width: 14px;
-  height: 5px;
-}
-
-.di-theme-card__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.di-theme-card__label {
-  color: var(--text-primary);
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.di-theme-card__check {
-  color: var(--accent);
-}
-
-.di-theme-card__blurb {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
 /* Signal Flow hero on S1 — sits between the subtitle and the form. The
    generous bottom margin clears the figcaption, which is inside the figure
    and would otherwise sit on the first field label. */
-.di-s1-hero {
-  margin: 20px 0 34px;
+.sf-hero { margin: 0; }
+
+/* S1 "More details" — optional fields folded under one line. */
+.di-more { border-top: 1px solid var(--line); padding-top: 14px; }
+.di-more summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 10px;
+  font: 600 13px var(--font-body); color: var(--fg); }
+.di-more summary::-webkit-details-marker { display: none; }
+.di-more summary::before { content: "+"; font-family: var(--font-mono); color: var(--muted); width: 10px; }
+.di-more[open] summary::before { content: "−"; }
+.di-more summary span { font: 12px var(--font-body); color: var(--muted); }
+.di-more[open] summary { margin-bottom: 14px; }
+/* S1: form first, live intersection beside it (below it on narrow screens). */
+.di-page.di-s1 { max-width: 1120px; }
+.di-s1__layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 40px; align-items: start; margin-top: 28px; }
+.di-s1__section { margin-top: 10px; }
+.di-s1__side { position: sticky; top: 8px; }
+.di-s1-hero { margin: 0; }
+.di-s1-hero .sf-road canvas { height: 300px; }
+@media (max-width: 1100px) {
+  .di-s1__layout { grid-template-columns: minmax(0, 1fr); }
+  .di-s1__side { position: static; }
 }

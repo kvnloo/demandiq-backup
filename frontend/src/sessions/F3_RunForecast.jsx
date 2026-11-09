@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
+import NeedsStep from '../components/NeedsStep'
 import { Loader2, Play } from 'lucide-react'
 
 import {
@@ -58,11 +59,6 @@ export default function F3_RunForecast() {
   const [status, setStatus] = useState('idle') // idle | loading | error
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    if (gateOpen) return
-    const t = setTimeout(() => navigate('/results'), 1200)
-    return () => clearTimeout(t)
-  }, [gateOpen, navigate])
 
   // Persist settings (debounced).
   const saveTimer = useRef(null)
@@ -77,7 +73,12 @@ export default function F3_RunForecast() {
       <div className="di-page di-fc">
         <div className="di-eyebrow">Forecasting · Step 3</div>
         <h1 className="di-h1">Run forecast</h1>
-        <p className="di-subtitle">Balance the existing volumes first. Redirecting…</p>
+        <NeedsStep
+          title="Balance the existing volumes first"
+          body="Forecasting grows the balanced base-year counts."
+          to="/analysis"
+          label="Go to Run Analysis"
+        />
       </div>
     )
   }
