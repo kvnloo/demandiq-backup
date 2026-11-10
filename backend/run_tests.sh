@@ -19,6 +19,7 @@ TESTS=(
   test_balancer_regressions
   test_qc_backend_fixes
   test_jev
+  test_voice
 )
 
 fails=0

@@ -226,3 +226,14 @@
    whole button opens the picker. */
 .di-s1__open { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 18px; }
 .di-s1__open-btn { display: inline-flex; align-items: center; cursor: pointer; height: 36px; }
+/* Talk it through (components/VoiceSetup.jsx) */
+.di-voice { display: grid; gap: 10px; margin: 0 0 18px; }
+.di-voice__row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.di-voice__btn { height: 36px; }
+.di-voice__btn.is-on { animation: di-voice-pulse 1.4s ease-in-out infinite; }
+.di-voice__link { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; opacity: 0.75; }
+.di-voice__type { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+.di-voice__result { display: grid; gap: 4px; font-size: 13px; }
+.di-voice__result q { opacity: 0.8; font-style: italic; }
+@keyframes di-voice-pulse { 50% { opacity: 0.7; } }
+@media (prefers-reduced-motion: reduce) { .di-voice__btn.is-on { animation: none; } }
