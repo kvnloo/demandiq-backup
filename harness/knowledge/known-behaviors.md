@@ -96,16 +96,16 @@ complements the known drop-below-raw NCHRP behavior above, it does not
 replace it). The message carries raw → balanced, signed percent, the
 GEH-vs-raw, and the direction word.
 
-The canonical trigger is the silent through-inflation class diagnosed in
-`diagnosis-through-inflation.md`: at a T-intersection the corridor through is
-the only cell shared by both adjacent link constraints, so accumulated link
-disagreement lands on it (e.g. seed 34093 PM int 7 WBT raw 50 → balanced
-210) while post-round link conservation closes exactly and every other check
-stays green. RECON-ADJUST is **disclosure only** — the balanced numbers are
-byte-identical with or without it, and the Grader still FAILs those runs on
-GEH-vs-key; the accuracy question is a separate fix. A `RECON-ADJUST` flag
-is therefore *expected* on runs hitting the through-inflation signatures —
-its absence on such a run would be the regression.
+It was built for the through-inflation class diagnosed in
+`diagnosis-through-inflation.md` (seed 34093 PM int 7 WBT raw 50 → balanced
+210 while link conservation closed exactly). That class is fixed
+(`Docs/through-inflation-fix.md`): unlinked cross-street legs now float, so a
+link change is shared by every movement on the link instead of piling onto
+the through. RECON-ADJUST is **disclosure only** — the balanced numbers are
+byte-identical with or without it. Since the fix it fires about a third as
+often (200 seeds per tier A–D: 103 flags before, 31 after) and mostly on
+cross-street turns that took a large share of a link change; that is
+expected, not a regression.
 
 ## Forger corpus firewall — synthetic sheets must NEVER train the extractor
 

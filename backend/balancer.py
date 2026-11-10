@@ -984,14 +984,12 @@ def reconciliation_adjustment_flags(raw_volumes, balanced, period=None,
     don't spam flags. Covers BOTH directions: inflations and reductions
     (complements the known drop-below-raw NCHRP behavior, doesn't replace it).
 
-    Why this exists: post-round link reconciliation can concentrate
-    accumulated adjacent-link disagreement onto one low-volume movement —
-    canonically the corridor through at a T-intersection, the only cell
-    shared by both adjacent link constraints — inflating it several-fold
-    while post-round link conservation still closes exactly (0.0). No
-    conservation, convergence, or residual check can see it; the balanced
-    number reads as trustworthy. See
-    harness/knowledge/diagnosis-through-inflation.md for the worked cases.
+    Why this exists: link balancing can move one movement far from its
+    count while link conservation still closes exactly (0.0), so no
+    conservation, convergence, or residual check can see it. It was built for
+    the corridor-through inflation at T-intersections (seed 34093 PM int 7
+    WBT 50 → 210; fixed, see Docs/through-inflation-fix.md); after that fix
+    it mostly fires on cross-street turns that absorb a large link change.
 
     Args:
         raw_volumes: { int_num: { movement: value } } — pre-balancing counts
@@ -1190,15 +1188,27 @@ def balance_nchrp(
     # is to run IPF cleanly and surface the link deltas as informational
     # via compute_link_conservation; engineers see exactly where adjacent
     # counts disagree.
+    # Only legs on a balanced (Full / Land Use) link are held to their Level-1
+    # targets; an unlinked cross-street leg floats. Pinning it sent every link
+    # change at a corridor intersection straight down the corridor through (at
+    # a T, EBT + WBT = E row + W row - cross-street col exactly): 50 became 210.
+    # Floating it spreads each link change over that link's movements in
+    # proportion to their volume. See Docs/through-inflation-fix.md.
+    linked_by_int = _build_links_by_int(
+        [L for L in links if L.get('mode', 'Full') != 'None'], coords=coords)
     for int_num, M in matrices.items():
+        linked = {LEG_INDEX[leg] for (_nb, leg, _ax) in linked_by_int.get(int_num, [])}
+        rt, ct = row_targets_per_int[int_num], col_targets_per_int[int_num]
+        if linked:
+            rt = [t if i in linked else None for i, t in enumerate(rt)]
+            ct = [t if i in linked else None for i, t in enumerate(ct)]
         # Iterate to at most 0.01 veh cell stability (tighter if the caller
         # asked for less) — Level 1 already gave us balanced targets. The only
         # sources of non-zero residual are (a) IPF cell-stability tolerance and
         # (b) structural infeasibility from thin matrices. `tol` (vehicles) is
         # the caller's bar: converged only if the leftover residual meets it.
         M_out, conv, iters_used, final_residual = furness_intersection(
-            M, row_targets_per_int[int_num], col_targets_per_int[int_num],
-            presents[int_num], tol=min(tol, 0.01), max_iter=max(max_iter, 2000),
+            M, rt, ct, presents[int_num], tol=min(tol, 0.01), max_iter=max(max_iter, 2000),
         )
         matrices[int_num] = M_out
         iterations[int_num] = iters_used
