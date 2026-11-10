@@ -5,6 +5,9 @@ Each failed before its fix. Script-style (run_tests.sh) and pytest-compatible.
 """
 
 import copy
+import json
+import math
+import os
 
 import balancer as B
 
@@ -49,9 +52,29 @@ def test_reconciliation_never_invents_counted_zero_movements():
     assert any(f["check"].startswith("NCHRP-LINK") for f in r["qc_flags"])
 
 
+def test_corridor_through_not_inflated_at_t_intersections():
+    # BAL-4: four Examiner tier-D puzzles (frozen from the harness seeds) where
+    # adjacent corridor counts disagree around a T-intersection. The corridor
+    # through used to absorb the whole disagreement (seed 34093 PM int 7 WBT:
+    # key 60, raw 50, balanced 210). It must stay near the true value while
+    # link conservation still closes.
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests", "through_inflation_cases.json")
+    with open(path) as f:
+        cases = json.load(f)
+    for c in cases:
+        raw = {int(n): v for n, v in c["raw"].items()}
+        coords = {int(n): v for n, v in c["coords"].items()}
+        r = B.balance_nchrp(raw, c["links"], method=c["method"], coords=coords)
+        got = r["balanced"][c["int"]][c["movement"]]
+        geh = math.sqrt(2 * (got - c["key"]) ** 2 / (got + c["key"]))
+        assert geh < 5, f"{c['source']} int {c['int']} {c['movement']}: key {c['key']}, balanced {got} (GEH {geh:.1f})"
+        assert all(abs(e["delta"]) <= 0.5 for e in r["link_conservation"] if e["mode"] == "Full"), c["source"]
+
+
 if __name__ == "__main__":
     for t in (test_coincident_coords_match_number_order,
               test_downstream_uturn_counts_as_arriving_on_the_link,
-              test_reconciliation_never_invents_counted_zero_movements):
+              test_reconciliation_never_invents_counted_zero_movements,
+              test_corridor_through_not_inflated_at_t_intersections):
         t()
-    print("test_balancer_regressions: 3 passed")
+    print("test_balancer_regressions: 4 passed")
