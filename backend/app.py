@@ -23,7 +23,7 @@ import secrets
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, Request, HTTPException, Depends
+from fastapi import FastAPI, File, Form, UploadFile, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
     FileResponse,
@@ -54,6 +54,7 @@ from line_diagram import (
 )
 from excel_export import build_workbook, strip_illegal_chars, workbook_bytes
 import jev
+import voice
 from forecasting.api import router as forecasting_router
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -332,6 +333,38 @@ def extract_endpoint(files: list[UploadFile] = File(...)):
         _bad("None of the files could be read. " +
              " ".join(f"{e['file']}: {e['error']}" for e in errors))
     return JSONResponse({"results": results, "errors": errors})
+
+
+MAX_VOICE_BYTES = 10 * 1024 * 1024  # about 10 minutes of compressed speech
+
+
+@app.post("/voice-setup", dependencies=[Depends(require_auth)])
+def voice_setup(audio: UploadFile | None = File(None), text: str | None = Form(None)):
+    """Project Setup by talking: audio (or typed text) -> transcript + the form fields it gave.
+    Audio is transcribed in memory and never stored."""
+    if audio is None and not (text or "").strip():
+        _bad("Send a recording or some text.")
+    transcript = (text or "").strip()
+    if audio is not None:
+        content = audio.file.read(MAX_VOICE_BYTES + 1)
+        if len(content) > MAX_VOICE_BYTES:
+            _bad("That recording is too long. Keep it under a few minutes.")
+        try:
+            transcript = voice.transcribe(content, Path(audio.filename or "talk.webm").suffix or ".webm")
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            log.warning("voice transcribe failed: %r", e)
+            _bad("Couldn't hear that recording. Try again, a little closer to the mic.")
+    if not transcript:
+        _bad("Didn't catch any words. Try again.")
+    try:
+        fields = voice.understand(transcript)
+    except Exception as e:
+        log.warning("voice understand failed: %r", e)
+        raise HTTPException(status_code=503, detail="Heard you, but the form filler is offline. "
+                            "Your words are below; type the fields in for now.")
+    return JSONResponse({"transcript": transcript, "fields": fields})
 
 
 @app.post("/suggest-matches", dependencies=[Depends(require_auth)])
