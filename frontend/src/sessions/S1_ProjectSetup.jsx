@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getProjectMeta, setProjectMeta, importProjectFile, getSnapshot } from '../store/projectStore'
 import SignalFlowHero from '../lib/signal-flow/SignalFlowHero'
+import VoiceSetup from '../components/VoiceSetup'
 import '../styles/forms.css'
 
 const todayISO = () => {
@@ -146,6 +147,8 @@ export default function S1_ProjectSetup() {
 
       <div className="di-s1__layout">
       <div className="di-form di-s1__form">
+        {/* Spoken values fill the form; the engineer checks them below before continuing. */}
+        <VoiceSetup onFields={(fields) => setForm((f) => ({ ...f, ...fields }))} />
         <div className="sf-eyebrow">Project</div>
         {textField('Project Name', 'name', true, { placeholder: 'e.g. Main Street Corridor Study' })}
 
