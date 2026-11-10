@@ -1,0 +1,7 @@
+# Voice Project Setup: open-source speech-to-text (Whisper), CPU only. Optional:
+# without it, /voice-setup still accepts typed text and says voice isn't installed.
+#   pip install -r backend/requirements-voice.txt
+# The form filler needs an OpenAI-compatible chat endpoint (see voice.py): Ollama locally,
+# or VOICE_LLM_URL / VOICE_LLM_MODEL / VOICE_LLM_KEY for a hosted open model.
+faster-whisper==1.2.1
+av==15.1.0  # pin: av 16+ dropped the metadata_errors argument faster-whisper 1.2.1 passes
