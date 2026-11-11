@@ -66,6 +66,28 @@ Order for every file:
 Before anything switches, each reader is scored on the same Forger known-answer sheets (text and scanned
 versions) and on the demo PDFs, and the scores come to the owner.
 
+## Guided helper (decided 2026-11-11)
+
+The owner picked A, B, C and D. No AI, no cost: code reads the project state.
+
+- **A. The app works out the next action.** After every click it looks at the project state and picks the single
+  next thing to do. It is not a fixed scripted tour, so skipping ahead, going back or reloading still points at the
+  right control.
+- **B. One ring and one line.** The website's green ring pulses around that one control, with a one-line
+  instruction that uses real names, e.g. "Click Union City Blvd at Jean Dr".
+- **C. Map helpers.** When the next target is off screen, an arrow on the screen edge points to it. A dotted line
+  pulses between two pins on the same street until they are linked, then turns solid with a "linked" label.
+- **D. Repeated work moves on by itself.** After the last approach of one street it goes straight to the next
+  street, with progress dots like "3 of 5".
+
+Order:
+1. Basic UI fixes (readable text, nothing cut off, phones) — PR `fix/ui-basics`, audit
+   `Docs/research/2026-11-11-ui-audit.html`.
+2. UX re-evaluation: the owner approves the screen-by-screen proposals in that audit (results screens first).
+3. A **video mockup** of the guide running on every page, made on the approved new screens, goes to the owner
+   before any guide code is written.
+4. Build A + B + C + D.
+
 ## Later (owner ideas, not scheduled)
 
 - Cheaper reading: a fixed example set per vendor so the API can cache it; Haiku for clean Excel/CSV files,

@@ -378,7 +378,7 @@ function ScenarioControl({ pct, onPct, status, disabled, error, active, onApply,
             min="0"
             max="100"
             step="0.5"
-            placeholder="% reduction"
+            placeholder="e.g. 10"
             value={pct}
             onChange={(e) => onPct(e.target.value)}
             style={{ maxWidth: 150 }}
