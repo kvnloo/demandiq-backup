@@ -35,3 +35,23 @@ reproduced it, re-run green after the fix).
   verdict-identical; 50 identical POSTs byte-identical; backend suite
   green (seed 94's MARGINAL accuracy-drift `f1bf8e87b69d` pre-dates the
   fix and is unrelated).
+
+## Corridor through inflated at T-intersections (`43e3470d5cfe`, `0ef7c180de21`, `e791ef99a454`, `146f86e36b93`)
+
+- **Symptom.** Tier C/D: a low-volume corridor through balances far above its
+  count (seed 34093 PM int 7 WBT: key 60, raw 50, tool 210) while link
+  conservation closes exactly 0.0, so no QC flag fires.
+- **Root cause.** Level 2 IPF held every leg to its Level-1 target, including
+  cross-street legs that sit on no balanced link. At a T, EBT + WBT = E row +
+  W row - cross-street column exactly, so with the cross street pinned the
+  through is the only free cell and takes every corridor link change. Not
+  IPF itself and not the link-resolution method.
+- **Fix.** `balance_nchrp` Level 2 passes `None` targets for legs not on a
+  Full/Land Use link, so they float and each link change spreads over that
+  link's movements by volume. Deterministic; uses leg indices, not compass
+  strings.
+- **Proof seeds.** 34093, 13594, 15327, 15711 frozen in
+  `backend/tests/through_inflation_cases.json` (210 -> 85 on 34093).
+  500 seeds per tier A-D: corridors past GEH 5 vs key 146 -> 3; one worse
+  (tier C seed 104 PM int 4 NBR 210 -> 220, key 145). Residual is the upward
+  bias of `larger` link resolution (Docs/through-inflation-fix.md OPEN 2).
