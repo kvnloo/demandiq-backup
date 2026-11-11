@@ -638,7 +638,7 @@ function DropsBanner({ drops, onReview }) {
         </div>
       </div>
       <button type="button" className="di-btn-primary di-btn-primary--sm" onClick={onReview}>
-        Review in S7 →
+        Review drops →
       </button>
     </div>
   )

@@ -12,6 +12,11 @@
 /* Form controls don't inherit the page font by default; without this, unstyled
    buttons and inputs fall back to the system face. */
 button, input, select, textarea { font-family: inherit; }
+/* A dropdown's open list copies the select's colours. Selects here sit on a 2%-white
+   (see-through) fill, so Chrome on Windows drew pale text on a white list. Give
+   every option a solid themed fill once, for all screens. */
+option, optgroup { background-color: var(--surface); color: var(--text-primary); }
+option:disabled { color: var(--text-tertiary); }
 /* Leaflet's attribution bar on our surfaces (as CrashIQ). !important because
    leaflet.css is imported later, by the map screens, at the same specificity. */
 .leaflet-container .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 82%, transparent) !important; color: var(--muted) !important; }
@@ -90,6 +95,20 @@ a.di-step:hover { background: var(--surface-2); }
   .di-top .di-proj { display: none; }
   .di-stage { padding: 16px; }
   .di-step::after { display: none; }
+  /* Edge-to-edge screens cancel the stage padding; here it is 16px, not 24/32,
+     so the old -24/-32 margins pushed their right edge off the screen. */
+  .di-stage > :is(.di-s2, .di-s3, .di-s4, .di-s5, .di-s6, .di-s7, .di-s8) { margin: -16px; height: auto; min-height: calc(100% + 32px); }
+}
+@media (max-width: 720px) {
+  /* Phones: side-by-side panes stack instead of squeezing text to a word per line. */
+  .di-stage :is(.di-s2, .di-s3__body, .di-s5__body, .di-s7__body, .di-fc-panes) { flex-direction: column; }
+  .di-stage :is(.di-s3__footer, .di-s3__footer-adv, .di-s7__toolbar, .di-s7__toolbar-l, .di-s7__toolbar-r, .di-s7r__tools-right, .di-segmented, .di-s5-row) { flex-wrap: wrap; height: auto; }
+  .di-stage :is(.di-s3__footer, .di-s7__toolbar) { padding-block: 8px; }
+  /* Wide data tables scroll sideways inside their card instead of wrapping every word. */
+  .di-stage :is(.di-s7r__table, .di-s6-lc__table) { display: block; overflow-x: auto; white-space: nowrap; }
+  .di-stage :is(.di-side, .di-s3__nav, .di-s5__summary, .di-fc-review) { width: auto; border-left: 0; border-right: 0; }
+  .di-stage :is(.di-s2__map, .di-s7__right, .di-fc-mapwrap) { flex: none; height: 55vh; border-left: 0; }
+  .di-stage :is(.di-rm__body, .di-s7r__lc-grid, .di-s8-grid, .di-s8-corridor-preview__grid, .di-fc-resgrid, .di-fc-diagrams) { grid-template-columns: minmax(0, 1fr); }
 }
 /* Print (S6–S8 reports): white paper, dark ink, no app chrome. The day
    palette is forced whatever the screen theme; diagrams print as their
@@ -100,6 +119,7 @@ a.di-step:hover { background: var(--surface-2); }
     --bg-base: #fff; --bg-deep: #fff; --bg-elevated: #fff; --bg-hover: transparent; --surface: #fff;
     --text-primary: #000; --text-secondary: #222; --text-tertiary: #444;
     --border: #bbb; --border-strong: #888; --accent: #1F5FAD; --accent-glow: transparent;
+    --delta-up: #2D8050; --delta-down: #B0413E;
     color-scheme: light;
   }
   html, body, #root { background: #fff !important; color: #000; }
