@@ -115,7 +115,7 @@
   border-radius: 10px;
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-family: var(--font-display);
   font-weight: 600;
   cursor: pointer;
@@ -201,7 +201,7 @@
 }
 .di-s6-conv__dot--ok   { background: #34D399; }
 .di-s6-conv__dot--warn { background: #FFB627; }
-.di-s6-conv__dot--fail { background: #FF6B6B; }
+.di-s6-conv__dot--fail { background: var(--stop); }
 .di-s6-conv__detail {
   font-size: 11px;
   color: var(--text-secondary);
@@ -297,7 +297,7 @@
 .di-s6-lc__row--warn td { color: var(--text-secondary); }
 .di-s6-lc__delta--ok    { color: #34D399; font-weight: 500; }
 .di-s6-lc__delta--warn  { color: #FFB627; font-weight: 600; }
-.di-s6-lc__delta--fail  { color: #FF6B6B; font-weight: 700; }
+.di-s6-lc__delta--fail  { color: var(--stop); font-weight: 700; }
 
 .di-s6-qc__note {
   margin-top: 10px;
@@ -361,7 +361,7 @@
 }
 .di-s6-hero__pill--warn {
   background: rgba(255, 182, 39, 0.10);
-  color: #FFD27A;
+  color: var(--amber);
   border-color: rgba(255, 182, 39, 0.4);
 }
 .di-s6-hero__pill--err {
@@ -420,7 +420,7 @@
   padding: 2px 6px;
   border-radius: 3px;
   background: rgba(255, 182, 39, 0.18);
-  color: #FFD27A;
+  color: var(--amber);
   font-weight: 700;
   letter-spacing: 0.04em;
   flex-shrink: 0;
@@ -471,7 +471,7 @@
 }
 .di-s6-tbl tr:last-child td { border-bottom: none; }
 .di-s6-tbl td.di-s6-tbl__ok { color: #34D399; }
-.di-s6-tbl td.di-s6-tbl__warn { color: #FFD27A; }
+.di-s6-tbl td.di-s6-tbl__warn { color: var(--amber); }
 
 .di-s6-tbl__cell--up   { color: #34D399; }
 .di-s6-tbl__cell--down { color: #FF8B8B; }
@@ -535,7 +535,7 @@
   letter-spacing: 0.005em;
 }
 .di-s6-hero2--ok .di-s6-hero2__head { color: #34D399; }
-.di-s6-hero2--warn .di-s6-hero2__head { color: #FFD27A; }
+.di-s6-hero2--warn .di-s6-hero2__head { color: var(--amber); }
 .di-s6-hero2--fail .di-s6-hero2__head { color: #FF8B8B; }
 .di-s6-hero2__sub {
   font-size: 12px;
@@ -575,7 +575,7 @@
 }
 .di-s6-meta__changed {
   font-size: 11px;
-  color: #FFD27A;
+  color: var(--amber);
   background: rgba(255, 182, 39, 0.08);
   border: 1px solid rgba(255, 182, 39, 0.25);
   padding: 3px 8px;
@@ -625,7 +625,7 @@
   flex-direction: column;
   gap: 2px;
   font-size: 12px;
-  color: #FFD27A;
+  color: var(--amber);
   font-variant-numeric: tabular-nums;
   line-height: 1.4;
 }
@@ -677,11 +677,11 @@
   border-bottom: 1px solid var(--border);
   color: var(--text-primary);
 }
-.di-s6-rt__row--warn td { color: #FFD27A; }
+.di-s6-rt__row--warn td { color: var(--amber); }
 /* F7: smoothed-row tone — lighter than --warn since "raw counts disagreed
  * by X veh, algorithm reconciled" is informational, not an error. */
 .di-s6-rt__row--smoothed td { color: #C5D0FA; }
-.di-s6-rt__warn-cell { color: #FFD27A; font-size: 10px; white-space: nowrap; }
+.di-s6-rt__warn-cell { color: var(--amber); font-size: 10px; white-space: nowrap; }
 
 /* ── Convergence: peak-iter headroom bar ─────────────────────────────── */
 .di-s6-conv__row--bar {

@@ -174,10 +174,10 @@ function SortableIntersection({ it, idx, selected, onSelect, onRemove }) {
       >
         <div className="di-int__name" title={it.name}>{it.name}</div>
         <div className="di-int__pills">
-          <span className="di-int__pill">{it.control}</span>
-          <span className="di-int__pill">{it.legs}</span>
-          <span className="di-int__pill">{it.mainDir}</span>
-          <span className="di-int__pill">{it.crossDir}</span>
+          {/* older project files lack legs/crossDir: skip blanks rather than draw empty boxes */}
+          {[it.control, it.legs, it.mainDir, it.crossDir].filter(Boolean).map((v, i) => (
+            <span key={i} className="di-int__pill">{v}</span>
+          ))}
         </div>
       </button>
       <div className="di-int__actions">
