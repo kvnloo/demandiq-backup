@@ -34,7 +34,9 @@ Goals and step order: [ROADMAP.md](ROADMAP.md). Repo rules: [../CLAUDE.md](../CL
 
 **Next steps, in order**
 1. Free PDF reader + code checks + cloud fallback (owner decision 2026-11-10, ROADMAP "Reading count files"):
-   build the free reader, score it on the Forger (text + scanned sheets) and the demo PDFs, report before switching.
+   built and scored in PR `feat/free-reader`, not merged ([free-reader.md](free-reader.md)). With no API, 50 of 50
+   Forger table and 50 of 50 diagram sheets were read exactly, 0 wrong numbers were let through, and all 100 scans
+   were handed to the cloud. Waiting on the owner's OPEN calls in free-reader.md before merging.
 2. Run the Forger's live Claude check once an API key is on the PC.
 3. Deploy (ROADMAP step 6) once the owner says go.
 

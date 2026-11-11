@@ -66,6 +66,9 @@ Order for every file:
 Before anything switches, each reader is scored on the same Forger known-answer sheets (text and scanned
 versions) and on the demo PDFs, and the scores come to the owner.
 
+Built (unmerged PR `feat/free-reader`): steps 1-2 and the fallback to today's Claude reader; scores in
+[free-reader.md](free-reader.md).
+
 ## Later (owner ideas, not scheduled)
 
 - Cheaper reading: a fixed example set per vendor so the API can cache it; Haiku for clean Excel/CSV files,

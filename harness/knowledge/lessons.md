@@ -55,3 +55,16 @@ reproduced it, re-run green after the fix).
   500 seeds per tier A-D: corridors past GEH 5 vs key 146 -> 3; one worse
   (tier C seed 104 PM int 4 NBR 210 -> 220, key 145). Residual is the upward
   bias of `larger` link resolution (Docs/through-inflation-fix.md OPEN 2).
+
+## pdfplumber glues close column headers, silently dropping a movement (free reader)
+
+- **Symptom.** Free reader on Forger style T: 7 of 50 sheets read WBU as null instead of 0, and the 15-min row
+  total check never ran. All checks still passed, so these were 7 wrong readings let through.
+- **Root cause.** `page.extract_text()` with its default `x_tolerance=3` joins words less than 3 pt apart, so the
+  header became `WUTOTAL`. That left 17 header cells against 18 data cells. Mapping by header name skipped the
+  glued column, and nothing compared the cell counts.
+- **Fix.** `extract_text(x_tolerance=1)`, plus a hard rule: a row with a different number of cells than its header
+  sends the file to the cloud. Never let a header-mapping miss shrink the table quietly.
+- **Proof seeds.** Style T seeds 4, 10, 22, 29, 40, 42, 43 (Helvetica 9 pt). 50 of 50 exact after the fix.
+- **Related pitfall.** `pip install docling` upgrades httpx to 0.28, which breaks anthropic 0.39.0 (`proxies=`).
+  `requirements-docling.txt` pins httpx back.
