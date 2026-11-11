@@ -175,7 +175,7 @@
 .di-s7r__toggle-count {
   padding: 1px 6px;
   background: rgba(255, 107, 107, 0.18);
-  color: #FF6B6B;
+  color: var(--stop);
   border-radius: 999px;
   font-variant-numeric: tabular-nums;
   font-size: 10px;
@@ -213,7 +213,7 @@
   font-family: ui-monospace, SFMono-Regular, monospace;
   color: var(--text-secondary);
 }
-.di-s7r__delta-neg { color: #FF6B6B; }
+.di-s7r__delta-neg { color: var(--stop); }
 
 /* AM (PM) pair rendering — keeps parens default color while AM/PM
  * numbers can be styled independently (e.g. red on negative delta) */
