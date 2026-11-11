@@ -55,8 +55,8 @@ the price of the cost." Pricing details come later with the financial model.
 
 Order for every file:
 1. **Free reader (code).** Read the text already inside computer-made PDFs, Excel and CSV, with one template
-   per common vendor, and use Docling (MIT licence) for computer-made layouts with no template. No AI, no cost,
-   the same answer every time.
+   per common vendor. No AI, no cost, the same answer every time. (Docling was tried and dropped 2026-11-11: it
+   found no tables on our sheets.) Diagram sheets ask the engineer to confirm left/right turns.
 2. **Checks in code decide if the free read is trustworthy.** The 15-minute rows must add up to the hour,
    approach totals must match their movements, the peak hour must be the busiest four quarters, and the PHF must
    be 0.25–1.0. A scan with no text, or any failed check, sends the file to step 3.
@@ -66,8 +66,30 @@ Order for every file:
 Before anything switches, each reader is scored on the same Forger known-answer sheets (text and scanned
 versions) and on the demo PDFs, and the scores come to the owner.
 
-Built (unmerged PR `feat/free-reader`): steps 1-2 and the fallback to today's Claude reader; scores in
+Built (PR #32, 2026-11-11): steps 1-2 and the fallback to today's Claude reader; scores in
 [free-reader.md](free-reader.md).
+
+## Guided helper (decided 2026-11-11)
+
+The owner picked A, B, C and D. No AI, no cost: code reads the project state.
+
+- **A. The app works out the next action.** After every click it looks at the project state and picks the single
+  next thing to do. It is not a fixed scripted tour, so skipping ahead, going back or reloading still points at the
+  right control.
+- **B. One ring and one line.** The website's green ring pulses around that one control, with a one-line
+  instruction that uses real names, e.g. "Click Union City Blvd at Jean Dr".
+- **C. Map helpers.** When the next target is off screen, an arrow on the screen edge points to it. A dotted line
+  pulses between two pins on the same street until they are linked, then turns solid with a "linked" label.
+- **D. Repeated work moves on by itself.** After the last approach of one street it goes straight to the next
+  street, with progress dots like "3 of 5".
+
+Order:
+1. Basic UI fixes (readable text, nothing cut off, phones) — PR `fix/ui-basics`, audit
+   `Docs/research/2026-11-11-ui-audit.html`.
+2. UX re-evaluation: the owner approves the screen-by-screen proposals in that audit (results screens first).
+3. A **video mockup** of the guide running on every page, made on the approved new screens, goes to the owner
+   before any guide code is written.
+4. Build A + B + C + D.
 
 ## Later (owner ideas, not scheduled)
 
