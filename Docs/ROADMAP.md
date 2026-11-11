@@ -41,7 +41,7 @@ transferred". DemandIQ only does volumes and forecasts. LOS, delay and queues be
 | 1 | Existing counts S1–S8 (read, balance, QC, export) | Built; pre-launch QC fixes merged (#23) |
 | 2 | Forecasting F1–F4 (SANDAG, MTC, HPMS, user model upload) | Built; 200 forecasting tests pass |
 | 3 | Known-answer test harness (Examiner for balancing, Forger for PDF reading) | Examiner built + nightly fuzz green; Forger's live check waits on API credits |
-| 4 | Fix the through-movement inflation that RECON-ADJUST only discloses | Fixed on a PR; waiting for the owner (Docs/through-inflation-fix.md) |
+| 4 | Fix the through-movement inflation that RECON-ADJUST only discloses | Done (#28, Docs/through-inflation-fix.md) |
 | 5 | Project setup by voice (open models) | Merged (#24); works locally, not hosted |
 | 6 | Deploy as a free beta at demand.aitransportationtools.com with sign-in | Waiting on the owner's go. Launch order: "Street IQ, then Crash IQ, followed by Demand IQ, and then Traffic Ops IQ" |
 | 7 | Hand volumes to Traffic Analysis (TrafficOpsIQ) | Not started |
