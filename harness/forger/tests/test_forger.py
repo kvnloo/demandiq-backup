@@ -289,3 +289,17 @@ def test_case_file_written_on_map_fail(tmp_path, monkeypatch):
     assert '--seed 7 --style D' in report, 'repro command must name seed and style'
     ledger = list(csv.DictReader(open(tmp_path / 'failures' / 'index.csv')))
     assert ledger and ledger[0]['signature'] == 'cafe01234567'
+
+
+# ── free code reader (no API) ────────────────────────────────────────────────
+
+def test_free_reader_scores_and_blind_spot():
+    from harness.forger import free_batch
+    for variant, t in free_batch.run(3).items():
+        assert t['partly'] + t['wrong'] == 0, (variant, t)       # nothing wrong let through
+        assert t['right' if variant in ('T', 'D') else 'cloud'] == 3, (variant, t)
+    caught = free_batch.misreads_caught(2)
+    assert caught[('T', 'left/right swapped (EBL<->EBR)')] == 2
+    # Known blind spot, recorded in Docs/free-reader.md: style D prints no 15-min
+    # rows, so a left/right swap inside one approach still matches every total.
+    assert caught[('D', 'left/right swapped (EBL<->EBR)')] == 0

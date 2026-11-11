@@ -1,7 +1,7 @@
 """
 DemandIQ Web App — Phase A
 ==========================
-Local FastAPI wrapper around count_agent.extract().
+Local FastAPI wrapper around free_reader.read() and count_agent.extract().
 
 Run locally:
     cd ~/Desktop/demandiq
@@ -9,7 +9,8 @@ Run locally:
     # then open http://127.0.0.1:8000
 
 On Render: Dockerfile sets up Poppler; set ANTHROPIC_API_KEY and
-APP_PASSWORD in the Environment tab.
+APP_PASSWORD in the Environment tab. Without the key only the free code
+reader works (Docs/free-reader.md).
 """
 
 import os
@@ -39,6 +40,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 
 from count_agent import extract, MOVEMENTS, MODEL as COUNT_MODEL
+import free_reader
 import capture
 from balancer import (balance_nchrp, fractional_volume_flags,
                       reconciliation_adjustment_flags, source_outlier_flags, _orient)
@@ -59,12 +61,12 @@ from forecasting.api import router as forecasting_router
 
 # ── Config ────────────────────────────────────────────────────────────────────
 API_KEY = os.getenv("ANTHROPIC_API_KEY")
-if not API_KEY:
-    raise RuntimeError(
-        "ANTHROPIC_API_KEY is not set. On Render: open the service's Environment "
-        "tab, add ANTHROPIC_API_KEY, and redeploy. Locally: export it in your shell "
-        "(e.g. ~/.bash_profile) and restart."
-    )
+# Without a key the free code reader still works; files it hands off get this error.
+NO_KEY_ERROR = (
+    "ANTHROPIC_API_KEY is not set. On Render: open the service's Environment "
+    "tab, add ANTHROPIC_API_KEY, and redeploy. Locally: export it in your shell "
+    "(e.g. ~/.bash_profile) and restart."
+)
 
 # If APP_PASSWORD is set, all routes require basic auth.
 # If unset (local dev), no auth — app works exactly as before.
@@ -311,18 +313,26 @@ def extract_endpoint(files: list[UploadFile] = File(...)):
             tmp.write(content)
             tmp_path = tmp.name
 
+        model = COUNT_MODEL
         try:
-            data = extract(tmp_path, API_KEY)
+            # Free code reader first; anything it can't read and check goes to the cloud.
+            data, why = free_reader.read(tmp_path)
+            if data:
+                data.update(reader="free", reader_reason=why)
+                model = "free-reader"
+            elif not API_KEY:
+                raise ValueError(f"The free reader could not read this file ({why}). {NO_KEY_ERROR}")
+            else:
+                data = extract(tmp_path, API_KEY)
+                data.update(reader="cloud", reader_reason=f"free reader: {why}")
             data["source_file"] = name
             results.append(data)
-            # Record what the model read. Hash only — no file bytes stored.
-            capture.record_extraction(name, content, result=data,
-                                      model=COUNT_MODEL)
+            # Record what was read. Hash only — no file bytes stored.
+            capture.record_extraction(name, content, result=data, model=model)
         except Exception as e:
             log.warning("extract failed for %s: %r", name, e)
             errors.append({"file": name, "error": _extract_error_text(e)})
-            capture.record_extraction(name, content, error=e,
-                                      model=COUNT_MODEL)
+            capture.record_extraction(name, content, error=e, model=model)
         finally:
             try:
                 os.unlink(tmp_path)
