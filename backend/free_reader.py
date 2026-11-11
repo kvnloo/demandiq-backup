@@ -8,8 +8,7 @@ Every reading must pass read_checks before it is returned.
 Layouts it reads:
   tabular   any table whose columns are named by movement (NL NT NR NU ... or
             NBL NBT ...): NDS / Quality Counts PDFs and Excel, the Forger's
-            style T, the Union City demo sheets, CSV. Docling (optional, MIT)
-            finds the table in PDFs whose text lines do not line up.
+            style T, the Union City demo sheets, CSV.
   diagram   the Forger's style D (Counts Unlimited-like peak-hour diagram).
 """
 import csv
@@ -20,6 +19,7 @@ import read_checks
 from count_agent import MOVEMENTS, _read_excel
 
 _DIR = {'N': 'NB', 'S': 'SB', 'E': 'EB', 'W': 'WB'}
+_WORD = {'NB': 'northbound', 'SB': 'southbound', 'EB': 'eastbound', 'WB': 'westbound'}
 _TIME = re.compile(r'^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP]M)?$', re.I)
 _TIME_IN = re.compile(r'(\d{1,2}):(\d{2})\s*([AP]M)', re.I)
 _NUM = re.compile(r'^-?\d+(\.\d+)?$')
@@ -205,23 +205,6 @@ def _cells(line):
     return [' '.join(toks[:k])] + toks[k:] if k and k > 1 else toks
 
 
-def _docling_rows(path):
-    """Table cells found by Docling (text layer only, no OCR), or None if not installed."""
-    try:
-        from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions
-        from docling.document_converter import DocumentConverter, PdfFormatOption
-    except ImportError:
-        return None
-    conv = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(
-        pipeline_options=PdfPipelineOptions(do_ocr=False))})
-    rows = []
-    for t in conv.convert(str(path)).document.tables:
-        df = t.export_to_dataframe()
-        rows += [[str(c) for c in df.columns]] + [[str(v) for v in r] for r in df.values.tolist()]
-    return rows
-
-
 def _vendor(text):
     t = text[:5000].lower()
     for key, name in (('national data', 'NDS'), ('quality counts', 'Quality Counts'),
@@ -275,13 +258,7 @@ def _read(path):
             if 'COUNTS UNLIMITED' in text and 'TOTAL ENTERING' in text and len(pdf.pages) == 1:
                 periods, layout = _diagram(pdf.pages[0]), 'diagram (Forger style D)'
             else:
-                try:
-                    periods, layout = _tabular(_cells(l) for l in text.splitlines()), 'tabular'
-                except _Unknown as e:
-                    rows = _docling_rows(path)
-                    if rows is None:
-                        raise _Unknown(f'{e}; Docling not installed')
-                    periods, layout = _tabular(rows), 'tabular via Docling'
+                periods, layout = _tabular(_cells(l) for l in text.splitlines()), 'tabular'
     else:
         return None, f'unknown layout: {ext or "no"} file type'
     if not periods:
@@ -312,6 +289,14 @@ def _read(path):
         }],
         'file_type': ftype,
     }
+    if layout.startswith('diagram'):
+        # A diagram prints only approach totals, so a left/right swap inside one approach passes every check.
+        for k, p in periods.items():
+            v = p['volumes']
+            pairs = ', '.join(f"{_WORD[d]} left {v[d + 'L']} / right {v[d + 'R']}"
+                              for d in ('NB', 'SB', 'EB', 'WB') if v.get(d + 'L') is not None)
+            warnings.append(f'{k}: diagram sheet, so left and right turns could not be checked against a total. '
+                            f'Confirm them against the sheet: {pairs}.')
     if warnings:
         result['warnings'] = warnings
     return result, f'{layout}; all checks passed'

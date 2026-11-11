@@ -113,7 +113,9 @@ def test_extract_route_free_then_cloud():
         r = client.post('/extract', files=[demo, scan]).json()
         assert [x['reader'] for x in r['results']] == ['free', 'cloud'] and len(calls) == 1
         assert r['results'][1]['reader_reason'].startswith('free reader: unknown layout')
+        assert client.get('/health').json()['cloud_reader'] == 'on'
         app_module.API_KEY = None                                 # no key: free still works
+        assert client.get('/health').json()['cloud_reader'].startswith('off')
         r = client.post('/extract', files=[demo, scan])
         assert r.status_code == 200 and r.json()['results'][0]['reader'] == 'free'
         assert 'ANTHROPIC_API_KEY is not set' in r.json()['errors'][0]['error'] and len(calls) == 1

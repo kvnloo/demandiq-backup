@@ -67,6 +67,10 @@ NO_KEY_ERROR = (
     "tab, add ANTHROPIC_API_KEY, and redeploy. Locally: export it in your shell "
     "(e.g. ~/.bash_profile) and restart."
 )
+if not API_KEY:
+    # Not fatal: the free reader works without it. Loud, so a deploy with a forgotten key is caught.
+    logging.getLogger("demandiq").warning(
+        "ANTHROPIC_API_KEY is not set: the cloud reader is OFF. Files the free reader can't read will fail.")
 
 # If APP_PASSWORD is set, all routes require basic auth.
 # If unset (local dev), no auth — app works exactly as before.
@@ -1087,8 +1091,8 @@ def export_excel_endpoint(payload: dict):
 
 @app.get("/health")
 async def health():
-    """Open endpoint — used by Render health checks."""
-    return {"status": "ok"}
+    """Open endpoint — used by Render health checks. cloud_reader says if the key is set (never the key)."""
+    return {"status": "ok", "cloud_reader": "on" if API_KEY else "off: ANTHROPIC_API_KEY is not set"}
 
 
 @app.get("/capture-stats", dependencies=[Depends(require_auth)])

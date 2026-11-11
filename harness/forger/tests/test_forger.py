@@ -303,3 +303,18 @@ def test_free_reader_scores_and_blind_spot():
     # Known blind spot, recorded in Docs/free-reader.md: style D prints no 15-min
     # rows, so a left/right swap inside one approach still matches every total.
     assert caught[('D', 'left/right swapped (EBL<->EBR)')] == 0
+
+
+def test_free_reader_diagram_asks_engineer_to_confirm_turns(tmp_path):
+    # Owner 2026-11-11: diagrams are read for free, but because a left/right swap passes every
+    # check, each read lists the left and right turns for the engineer to confirm.
+    from harness.forger import free_batch, sheets
+    path = tmp_path / 'd.pdf'
+    path.write_bytes(sheets.render_pdf(sheets.generate_sheet(1, 'D')))
+    result, _ = free_batch.free_reader.read(path)
+    warns = result.get('warnings', [])
+    assert len(warns) == 2 and all('Confirm them against the sheet' in w for w in warns), warns
+    v = result['intersections'][0]['volumes']['AM']
+    assert f"eastbound left {v['EBL']} / right {v['EBR']}" in warns[0]
+    path.write_bytes(sheets.render_pdf(sheets.generate_sheet(1, 'T')))
+    assert 'warnings' not in free_batch.free_reader.read(path)[0]   # tables are checked by their totals
