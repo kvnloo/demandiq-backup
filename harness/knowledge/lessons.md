@@ -67,4 +67,4 @@ reproduced it, re-run green after the fix).
   sends the file to the cloud. Never let a header-mapping miss shrink the table quietly.
 - **Proof seeds.** Style T seeds 4, 10, 22, 29, 40, 42, 43 (Helvetica 9 pt). 50 of 50 exact after the fix.
 - **Related pitfall.** `pip install docling` upgrades httpx to 0.28, which breaks anthropic 0.39.0 (`proxies=`).
-  `requirements-docling.txt` pins httpx back.
+  Docling was dropped (owner, 2026-11-11); pin httpx back if it ever returns.

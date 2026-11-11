@@ -18,8 +18,6 @@ The engineer confirms every number either way. Each `/extract` result now says w
   the three Union City demo sheets, NDS / Quality Counts Excel workbooks, CSV. Columns are mapped to movements
   by their header names only. If a row has a different number of cells than its header, the file goes to the cloud.
 - **The Forger's style D diagram** (Counts Unlimited-like), by the fixed positions of each number on the drawing.
-- **Docling** is wired in for PDFs whose text lines don't form a table. It is optional
-  (`backend/requirements-docling.txt`) and is not in the Docker image.
 
 Everything else goes to the cloud: scans, files with more than one intersection, multi-page PDFs that repeat the
 same 15-min rows (e.g. Total + Cars + Trucks pages), and files missing an AM or PM count.
@@ -74,23 +72,22 @@ one approach doesn't change any total. Only the fixed position template protects
   confirmed reading in `backend/training_data.jsonl`. `test_free_reader.py` checks this when the file is on the
   machine and skips it in CI.
 
-## Docling
+## Docling (dropped)
 
-On these sheets Docling found **no tables**. It read the demo PDF's table as a paragraph and a ruled reportlab grid
-as an image, so the Docling path never fired. Every Forger, demo and Excel result above comes from the pdfplumber,
-openpyxl and diagram templates. Anything Docling would return goes through the same header mapping and the same
-checks. Installing it pulls in torch (~550 MB) and upgrades httpx to a version that breaks the cloud reader, so
-`requirements-docling.txt` pins httpx back.
+On these sheets Docling found **no tables** (it read the demo table as a paragraph and a ruled grid as an image),
+and it costs ~550 MB (torch). The owner dropped it on 2026-11-11.
 
-## OPEN (owner's call)
+## Owner decisions (2026-11-11: "all the 3 use recommended")
 
-1. **Trust D diagrams on totals alone?** A left/right swap inside one approach passes every check (0 of 50 caught).
+1. **DECIDED: read diagrams for free, and ask the engineer to confirm left/right turns.** Each diagram read adds a
+   warning listing every approach's left and right turn to check against the sheet. Was: **Trust D diagrams on totals alone?** A left/right swap inside one approach passes every check (0 of 50 caught).
    The template reads them right (50 of 50), but no check confirms it. Options: keep it, or send every diagram
    without 15-min rows to the cloud.
-2. **Missing key no longer stops the app.** `app.py` used to refuse to start without `ANTHROPIC_API_KEY`. Now it
+2. **DECIDED: keep starting without the key, with a loud warning.** The server logs "cloud reader is OFF" at
+   startup and `/health` reports `cloud_reader`. Was: **Missing key no longer stops the app.** `app.py` used to refuse to start without `ANTHROPIC_API_KEY`. Now it
    starts, the free reader works, and only the files it hands off get the existing "ANTHROPIC_API_KEY is not set"
    error. The downside: a deploy with a forgotten key isn't caught at startup.
-3. **Keep Docling?** It found nothing on our sheets and costs ~550 MB. Keep it optional, add it to the image, or
+3. **DECIDED: Docling dropped.** Was: **Keep Docling?** It found nothing on our sheets and costs ~550 MB. Keep it optional, add it to the image, or
    remove it. A real vendor PDF where pdfplumber fails would settle this. The repo has none.
 4. **Real vendor templates.** The diagram template only matches the Forger's drawing. Real Counts Unlimited, GRAM
    and Pape-Dawson PDFs go to the cloud until there are sample files to build templates from.

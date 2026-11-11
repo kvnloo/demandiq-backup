@@ -1,6 +1,0 @@
-# Free reader, optional Docling path (MIT): finds tables in computer-made PDFs whose
-# text lines don't line up. Pulls in torch (~550 MB) and downloads models on first use.
-# Without it, free_reader hands those files to the cloud reader.
-#   pip install -r backend/requirements-docling.txt
-docling==2.150.0
-httpx==0.27.2  # pin: docling pulls httpx 0.28, which breaks anthropic 0.39.0
