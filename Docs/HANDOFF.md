@@ -16,9 +16,10 @@ Goals and step order: [ROADMAP.md](ROADMAP.md). Repo rules: [../CLAUDE.md](../CL
   204 confirmed examples in `backend/training_data.jsonl`. Balancing: code (`backend/balancer.py`).
   Every bug the 4-checker pre-launch QC found is fixed (#23). Tolerance is in vehicles: old % values under 0.1
   are read as 0.5 veh.
-- **Accuracy gap.** Post-round reconciliation piles leftover link disagreement onto the corridor
-  through movement, up to 4× its raw count (seed 34093 PM int 7: WBT raw 50 → 210). RECON-ADJUST (#19) flags
-  it for the engineer but does not fix it. Diagnosis: `harness/knowledge/diagnosis-through-inflation.md`.
+- **Accuracy gap (fixed, PR #28).** The corridor through at a T-intersection used to take every
+  link change (seed 34093 PM int 7 WBT: count 50 → 210). Fixed on `fix/through-inflation`: side-street legs
+  with no link now float, so it balances to 85. Over 2,000 harness corridors, those past GEH 5 went 146 → 3.
+  Owner kept the floating side street and the "larger" link rule (`Docs/through-inflation-fix.md`).
 - **Forecasting (F1–F4).** SANDAG (base year + 2035, 2050), Bay Area MTC, HPMS statewide, and the user's own model file.
   The unpacked model data (`data/sandag`, `data/hpms`, `data/mtc`, ~93 MB) is gitignored, so a clean clone or
   the Docker image can't forecast until it's added. The SANDAG 2022/2035/2050 zips (~20 MB each) are committed
@@ -32,15 +33,13 @@ Goals and step order: [ROADMAP.md](ROADMAP.md). Repo rules: [../CLAUDE.md](../CL
 - **Jev name matching.** Merged. Suggest-only, and the app behaves the same without a key.
 
 **Next steps, in order**
-1. Fix the through-movement inflation (ROADMAP step 4). Write the regression test from seed 34093 first, then
-   confirm on the Examiner that normal results don't change.
-2. Run the Forger's live check once API credits are confirmed.
-3. Deploy (ROADMAP step 6) once the owner says go.
+1. Run the Forger's live check once API credits are confirmed.
+2. Deploy (ROADMAP step 6) once the owner says go.
 
 **Blocked on the owner**
 - "Go" for deploying DemandIQ. It's a Python server, so it needs a home machine behind Cloudflare Tunnel or a
   cheap VPS. Cloudflare Pages alone can't run it.
-- API credits for the Forger's live check. The account had none in July; it may have some now.
+- An Anthropic API key on the Windows PC (the Hermes `.env` line is empty) for the Forger's live check.
 
 ## Working notes
 
