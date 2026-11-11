@@ -33,8 +33,10 @@ Goals and step order: [ROADMAP.md](ROADMAP.md). Repo rules: [../CLAUDE.md](../CL
 - **Jev name matching.** Merged. Suggest-only, and the app behaves the same without a key.
 
 **Next steps, in order**
-1. Run the Forger's live check once API credits are confirmed.
-2. Deploy (ROADMAP step 6) once the owner says go.
+1. Free PDF reader + code checks + cloud fallback (owner decision 2026-11-10, ROADMAP "Reading count files"):
+   build the free reader, score it on the Forger (text + scanned sheets) and the demo PDFs, report before switching.
+2. Run the Forger's live Claude check once an API key is on the PC.
+3. Deploy (ROADMAP step 6) once the owner says go.
 
 **Blocked on the owner**
 - "Go" for deploying DemandIQ. It's a Python server, so it needs a home machine behind Cloudflare Tunnel or a

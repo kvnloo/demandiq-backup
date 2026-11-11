@@ -47,6 +47,25 @@ transferred". DemandIQ only does volumes and forecasts. LOS, delay and queues be
 | 7 | Hand volumes to Traffic Analysis (TrafficOpsIQ) | Not started |
 | 8 | Save engineer corrections from voice and extraction into the example library | Not started |
 
+## Reading count files (decided 2026-11-10)
+
+Owner: "I like your option of having one and two. If two is not able to decipher or if that is wrong,
+the cloud helps out." And: "The cloud has a free agent or paid agent. The paid agent will charge them double
+the price of the cost." Pricing details come later with the financial model.
+
+Order for every file:
+1. **Free reader (code).** Read the text already inside computer-made PDFs, Excel and CSV, with one template
+   per common vendor, and use Docling (MIT licence) for computer-made layouts with no template. No AI, no cost,
+   the same answer every time.
+2. **Checks in code decide if the free read is trustworthy.** The 15-minute rows must add up to the hour,
+   approach totals must match their movements, the peak hour must be the busiest four quarters, and the PHF must
+   be 0.25–1.0. A scan with no text, or any failed check, sends the file to step 3.
+3. **Cloud reader.** The free tier uses an open model; the paid tier uses Claude and is charged to the user at
+   2× its cost. The engineer confirms every number either way, as today.
+
+Before anything switches, each reader is scored on the same Forger known-answer sheets (text and scanned
+versions) and on the demo PDFs, and the scores come to the owner.
+
 ## Later (owner ideas, not scheduled)
 
 - Cheaper reading: a fixed example set per vendor so the API can cache it; Haiku for clean Excel/CSV files,
