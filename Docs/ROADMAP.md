@@ -29,7 +29,7 @@ transferred". DemandIQ only does volumes and forecasts. LOS, delay and queues be
 ## Rules that hold everywhere
 
 - Code computes every number. AI only reads and suggests, and an engineer accepts or rejects each suggestion.
-- "Learning" = the confirmed-example library (`backend/training_data.jsonl`) plus the correction log
+- "Learning" = the confirmed-example library (synthetic `backend/reference_examples.jsonl` in the repo, the owner's real `training_data.jsonl` in `THIRD_PARTY_DIR`) plus the correction log
   (`backend/capture.py`), never a self-training model. A suite-level agent on the website can use them later
   (trafficiq `docs/AGENT.md`); DemandIQ gets no agent of its own.
 - Guideline checks warn. They never block.

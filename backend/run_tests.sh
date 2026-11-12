@@ -22,6 +22,7 @@ TESTS=(
   test_voice
   test_read_checks
   test_free_reader
+  test_samples
 )
 
 fails=0

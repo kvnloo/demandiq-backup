@@ -58,6 +58,13 @@ jobs:
         # the geo stack, which CI does not install. The numeric pipeline and the
         # fuzz bot are pure Python and run here as a blocking gate.
         run: python -m pytest tests/forecasting/ -q
+      - name: Geo sample fixtures (synthetic SANDAG-schema network)
+        # The upload/ingest tests read the synthetic network in
+        # tests/fixtures/samples/network; they need the geo stack, so install it
+        # here (last step) and run just those, rather than skip them.
+        run: |
+          pip install -r requirements-forecasting.txt
+          python -m pytest tests/forecasting/test_upload_network.py -q
 
   harness:
     name: Examiner harness — schema drift + detector suite

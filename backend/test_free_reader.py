@@ -17,8 +17,6 @@ import free_reader                                                # noqa: E402
 
 FIX = HERE / 'tests' / 'fixtures'
 DEMO = FIX / 'TMC_1_UnionCityBlvd_at_RegentsBlvd.pdf'
-# Owner's real NDS workbook (gitignored Test/ folder); its confirmed reading is in training_data.jsonl.
-XLSX = Path(os.environ.get('DQ_TEST_XLSX', HERE.parent / 'Test' / '24-080045-001 Oakwood Dr & El Camino Real.xlsx'))
 
 CSV_HEAD = 'Time,NL,NT,NR,SL,ST,SR,EL,ET,ER,WL,WT,WR,TOTAL\n'
 CSV_ROWS = ['07:00,1,10,1,1,10,1,1,10,1,1,10,1,48', '07:15,2,20,2,2,20,2,2,20,2,2,20,2,96',
@@ -74,22 +72,22 @@ def test_csv_good_and_bad():
     assert r is None and 'no PM counts' in why, why
 
 
-def test_real_nds_excel_matches_confirmed_reading():
-    if not XLSX.exists():
-        print('  (skipped: owner workbook not on this machine)')
-        return
-    r, why = free_reader.read(XLSX)
-    assert r, why
-    i = r['intersections'][0]
-    # confirmed answer: backend/training_data.jsonl, Oakwood Dr & El Camino Real .xlsx
-    assert (i['am_peak_start'], i['pm_peak_start']) == ('07:45', '15:45')
-    assert i['volumes']['AM'] == {'EBU': 36, 'EBL': 37, 'EBT': 1898, 'EBR': 20, 'WBU': 37, 'WBL': 52,
-                                  'WBT': 943, 'WBR': 23, 'NBU': 0, 'NBL': 71, 'NBT': 24, 'NBR': 88,
-                                  'SBU': 0, 'SBL': 161, 'SBT': 15, 'SBR': 39}
-    assert i['volumes']['PM'] == {'EBU': 59, 'EBL': 74, 'EBT': 1266, 'EBR': 25, 'WBU': 49, 'WBL': 61,
-                                  'WBT': 1675, 'WBR': 36, 'NBU': 0, 'NBL': 40, 'NBT': 19, 'NBR': 54,
-                                  'SBU': 0, 'SBL': 60, 'SBT': 7, 'SBR': 32}
-    assert i['phf'] == {'AM': 0.956, 'PM': 0.97} and i['hv_pct'] == {'AM': 2.6, 'PM': 1.9}
+def test_synthetic_samples_exact_or_handed_off():
+    # backend/tests/fixtures/samples (synthetic look-alikes of vendor formats, answers in expected.json):
+    # every free read must match exactly; anything else must go to the cloud, never be wrong.
+    import json
+    samples = FIX / 'samples'
+    exp = json.loads((samples / 'expected.json').read_text())['files']
+    free = []
+    for name, want in exp.items():
+        r, why = free_reader.read(samples / name)
+        if r is None:
+            continue
+        got, w = r['intersections'][0], want['intersections'][0]
+        for k in ('am_peak_start', 'pm_peak_start', 'volumes', 'phf', 'hv_pct'):
+            assert got.get(k) == w.get(k), (name, k, got.get(k), w.get(k))
+        free.append(name)
+    assert {'tabular15_1.xlsx', 'tabular15_2.xlsx'} <= set(free), free   # NDS-style workbooks read for free
 
 
 def test_extract_route_free_then_cloud():

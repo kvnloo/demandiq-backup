@@ -67,10 +67,9 @@ one approach doesn't change any total. Only the fixed position template protects
 - 3 Union City demo PDFs (`backend/tests/fixtures/`): all 3 read by the free reader, every check passed. The values
   match the sheets' printed Peak Hr rows. There is no separate answer key in the repo, so this is checked against
   the sheet itself, not against independent known values.
-- `Test/24-080045-001 Oakwood Dr & El Camino Real.xlsx` (the owner's NDS workbook, gitignored): read by the free
-  reader. All 32 movements, both peak hours (07:45, 15:45), PHF (0.956, 0.970) and HV% (2.6, 1.9) match the
-  confirmed reading in `backend/training_data.jsonl`. `test_free_reader.py` checks this when the file is on the
-  machine and skips it in CI.
+- The 8 synthetic sample files in `backend/tests/fixtures/samples/` (look-alikes of vendor formats, answers in
+  `expected.json`, PR #34): both 15-minute Excel workbooks read exactly for free; the 2 matching PDFs and the 4
+  five-minute reports go to the cloud (layout not built yet). 0 read wrong. `test_free_reader.py` checks this in CI.
 
 ## Docling (dropped)
 
@@ -99,5 +98,4 @@ and it costs ~550 MB (torch). The owner dropped it on 2026-11-11.
 ```bash
 python -m harness.forger.free_batch --n 50              # scores above, ~20 s, no API
 cd backend && python3.12 test_read_checks.py && python3.12 test_free_reader.py
-DQ_TEST_XLSX="<path to Oakwood .xlsx>" python3.12 test_free_reader.py   # include the real workbook
 ```

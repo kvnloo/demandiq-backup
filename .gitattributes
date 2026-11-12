@@ -1,2 +1,3 @@
-# PDFs are binary: autocrlf on Windows checkouts would break their byte offsets.
+# Sample fixtures are byte-exact: PDFs are binary, the CSVs keep their CRLF lines.
 *.pdf binary
+backend/tests/fixtures/samples/*.csv -text
