@@ -139,7 +139,7 @@
   height: 32px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 600;
   display: flex;
@@ -261,7 +261,7 @@
 }
 .di-ap-card--dne .di-ap-card__dne-toggle {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -314,12 +314,12 @@
 }
 .di-ap-pill--blue {
   background: rgba(10, 132, 255, 0.10);
-  color: var(--accent-hover);
+  color: var(--accent);
   border: 1px solid rgba(10, 132, 255, 0.30);
 }
 .di-ap-pill--amber {
   background: rgba(255, 182, 39, 0.08);
-  color: #FFD27A;
+  color: var(--amber);
   border: 1px solid rgba(255, 182, 39, 0.30);
   font-variant-numeric: tabular-nums;
 }

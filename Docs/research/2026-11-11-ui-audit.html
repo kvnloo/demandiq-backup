@@ -1,0 +1,407 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DemandIQ UI audit — 2026-11-11</title><style>
+:root{--bg:#0d1013;--card:#151a1f;--line:#29323b;--fg:#e6eaee;--mut:#9aa5b0;--red:#ff5a4e;--go:#1ee39a;--amb:#ffb020}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:980px;margin:0 auto;padding:18px 14px 60px}h1{font-size:26px;margin:6px 0 4px}h2{font-size:21px;margin:34px 0 8px;padding-top:10px;border-top:2px solid var(--red)}
+h3{font-size:17px;margin:22px 0 6px}p{margin:6px 0}.mut{color:var(--mut)}a{color:#8ab8ff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}.pair figure{margin:0}.pair img,.one img{width:100%;border:1px solid var(--line);border-radius:6px;display:block}
+figcaption{font-size:12px;color:var(--mut);margin:3px 0 0}
+table{width:100%;border-collapse:collapse;font-size:13.5px}td,th{padding:6px 6px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{color:var(--mut);font-weight:600;font-size:12px}
+.ok{color:var(--go);font-weight:700}.no{color:var(--red);font-weight:700}.tag{display:inline-block;font:700 12px/1 ui-monospace,monospace;background:#2a3138;border-radius:4px;padding:3px 6px;margin-right:6px}
+.kpi{display:flex;gap:10px;flex-wrap:wrap}.kpi div{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.kpi b{display:block;font-size:22px}
+nav a{display:inline-block;margin:2px 10px 2px 0}ol li,ul li{margin:4px 0}.toc{font-size:14px}
+@media(max-width:600px){.pair{grid-template-columns:1fr}td,th{font-size:13px}}
+</style></head><body><main>
+<h1>DemandIQ UI audit</h1><p class="mut">2026-11-11 · demo corridor: El Cajon Blvd (Park Blvd, Texas St, 30th St), San Diego, counts 2025, SANDAG forecast to 2035 · both themes · desktop 1440×900 and phone 390×780 · branch <b>fix/ui-basics</b></p>
+<div class="kpi"><div><b>109</b>things shown on the 7 results screens</div><div><b class="ok">40</b>clear</div><div><b class="no">69</b>unclear</div><div><b>26</b>basic problems found</div><div><b class="ok">15</b>fixed in the PR</div><div><b class="no">11</b>left (need a UX decision)</div></div>
+<p class="toc"><a href="#results">1. Results screens: can an engineer read them?</a> · <a href="#rvis">2. How results could look (from your mockups)</a> · <a href="#fixed">3. Basic fixes, before / after</a> · <a href="#left">4. Problems left</a> · <a href="#inv">5. Every control, screen by screen</a> · <a href="#ux">6. Bigger UX proposals</a> · <a href="#helper">7. Guided helper (your decision)</a> · <a href="#nc">8. Not checked</a></p>
+<h2 id="results">1. Results screens: can an engineer read them?</h2><p>Every number, code, badge and text block on the seven results screens, what an engineer should read from it, and whether the screen makes that clear. Left: today (after the basic fixes, dark theme). Right: the closest mockup you approved. DemandIQ shows volumes and forecasts only; delay, LOS and queues stay in Traffic Analysis.</p>
+<h3>S6 Run analysis (balancing summary) — 25 shown · <span class="ok">9 clear</span> · <span class="no">16 unclear</span></h3>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/res_S6a_today.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S6a_today.jpg" alt="today"></a><figcaption>Today</figcaption></figure><figure><a href="2026-11-11-ui-audit/res_S6a_mockup.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S6a_mockup.jpg" alt="mockup"></a><figcaption>Mockup: 09_balancing_report.png</figcaption></figure></div>
+<div class="card"><table><tr><th>Shown</th><th>What an engineer should read</th><th></th></tr>
+<tr><td>Headline &quot;All 4 links conserve ✓&quot; in amber</td><td>Balancing finished and the counts between neighbours now agree</td><td><span class=no>unclear</span> — &quot;conserve&quot; is engine talk; amber means caution while the tick means fine</td></tr>
+<tr><td>&quot;Link targets: larger of the two counts&quot;</td><td>Where two counts of the same street disagreed, the bigger one was used</td><td><span class=no>unclear</span> — &quot;link target&quot; is internal; no street named</td></tr>
+<tr><td>&quot;Tolerance: 0.50 veh&quot;</td><td>How close is close enough</td><td><span class=no>unclear</span> — no so-what for the reader</td></tr>
+<tr><td>&quot;Run 5m ago&quot;</td><td>When the numbers were made</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;AM 3/3 · PM 3/3 intersections settled (volumes stopped changing)&quot;</td><td>Every intersection balanced in both peaks</td><td><span class=ok>clear</span> — explained in brackets</td></tr>
+<tr><td>Run metadata: Balancing On</td><td>Balancing was used</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Run metadata: Peak mode Corridor (shared)</td><td>One common peak hour for the whole street</td><td><span class=no>unclear</span> — meaning not shown</td></tr>
+<tr><td>Run metadata: Direction EB/WB</td><td>The main street runs east–west</td><td><span class=no>unclear</span> — direction code, no street name</td></tr>
+<tr><td>Run metadata: AM/PM window 07:00–09:00</td><td>The count periods</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Run metadata: Max iterations 500</td><td>Engine limit</td><td><span class=no>unclear</span> — engine setting, means nothing to the reader</td></tr>
+<tr><td>Run metadata: Run at (date and time)</td><td>When the numbers were made</td><td><span class=ok>clear</span> — repeats &quot;Run 5m ago&quot;</td></tr>
+<tr><td>Run metadata: Links 2 (Full 2 · Land Use 0 · None 0)</td><td>How many street sections are balanced</td><td><span class=no>unclear</span> — mode names are internal</td></tr>
+<tr><td>Warning &quot;AM: 5 drops below raw · largest -15 veh (Int 2 NBL)&quot;</td><td>Five turning numbers went down; the biggest is Texas St northbound left, 15 cars</td><td><span class=no>unclear</span> — &quot;Int 2 NBL&quot; and &quot;raw&quot; are codes</td></tr>
+<tr><td>Button &quot;Review drops →&quot; (was &quot;Review in S7 →&quot;)</td><td>Go and check the numbers that went down</td><td><span class=ok>clear</span> — fixed in this PR</td></tr>
+<tr><td>&quot;Resolved link targets · 1 reconciled raw counts&quot;</td><td>One street section had two counts that disagreed</td><td><span class=no>unclear</span> — three jargon words in one line</td></tr>
+<tr><td>Link table: street pair &quot;1 · El Cajon Blvd &amp; Park Blvd → 2 · …&quot;</td><td>Which block of El Cajon Blvd</td><td><span class=ok>clear</span> — street names shown</td></tr>
+<tr><td>Link table: DIR &quot;EB&quot;</td><td>Eastbound</td><td><span class=no>unclear</span> — code</td></tr>
+<tr><td>Link table: MODE &quot;Full&quot;</td><td>Balanced both ends</td><td><span class=no>unclear</span> — internal mode name</td></tr>
+<tr><td>Link table: UPSTREAM OUTFLOW / DOWNSTREAM INFLOW &quot;725 (840)&quot;</td><td>Cars leaving one signal and arriving at the next, AM (PM)</td><td><span class=no>unclear</span> — AM and PM packed in one cell, no unit</td></tr>
+<tr><td>Link table: DELTA &quot;0.0 (0.0) ✓&quot;</td><td>They match</td><td><span class=no>unclear</span> — decimals on cars, no unit</td></tr>
+<tr><td>Convergence rows &quot;AM 2 · PM 2 passes · both settled (within 0.50 veh)&quot;</td><td>Each intersection balanced</td><td><span class=no>unclear</span> — &quot;passes&quot; is engine talk</td></tr>
+<tr><td>Bar &quot;0% of limit&quot; / &quot;5% of limit&quot;</td><td>How hard the engine worked</td><td><span class=no>unclear</span> — no so-what for the reader</td></tr>
+<tr><td>Button &quot;Run again&quot;</td><td>Re-balance</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Button &quot;Re-run with Average&quot;</td><td>Re-balance using the average of the two counts</td><td><span class=no>unclear</span> — average of what is not said</td></tr>
+<tr><td>Buttons &quot;Review movements →&quot;, &quot;Skip to results →&quot;, &quot;Continue to review drops →&quot;</td><td>Three ways forward</td><td><span class=ok>clear</span> — but three next steps compete</td></tr>
+</table></div>
+<h3>S6 Review movements (one intersection) — 12 shown · <span class="ok">5 clear</span> · <span class="no">7 unclear</span></h3>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/res_S6b_today.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S6b_today.jpg" alt="today"></a><figcaption>Today</figcaption></figure><figure><a href="2026-11-11-ui-audit/res_S6b_mockup.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S6b_mockup.jpg" alt="mockup"></a><figcaption>Mockup: 08_review_changes_why.png</figcaption></figure></div>
+<div class="card"><table><tr><th>Shown</th><th>What an engineer should read</th><th></th></tr>
+<tr><td>&quot;Int 1 / 3 · El Cajon Blvd &amp; Park Blvd&quot; with ◀ ▶</td><td>Which intersection, 1 of 3</td><td><span class=no>unclear</span> — &quot;Int&quot; code before the name</td></tr>
+<tr><td>AM / PM switch</td><td>Which peak</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;Resolution: Larger — each shared link takes the larger of its two raw counts&quot;</td><td>Rule used where counts disagreed</td><td><span class=no>unclear</span> — &quot;link&quot;, &quot;raw&quot;</td></tr>
+<tr><td>&quot;Details — show the math&quot;</td><td>Open the working</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Balanced / Changes tabs</td><td>Numbers after balancing, or what changed</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Diagram arrows with numbers (95, 520, 65 …)</td><td>Cars per hour for each turn, after balancing</td><td><span class=no>unclear</span> — no unit on the diagram</td></tr>
+<tr><td>Circled &quot;1&quot; on the diagram</td><td>Intersection number</td><td><span class=no>unclear</span> — internal number, street name already shown</td></tr>
+<tr><td>&quot;WHAT CHANGED · 3 OF 12 ADJUSTED&quot;</td><td>Three turning numbers changed</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;EBT 610 → 605 -5 ▼&quot;</td><td>Eastbound through went from 610 to 605</td><td><span class=no>unclear</span> — movement code EBT</td></tr>
+<tr><td>&quot;▸ 9 unchanged&quot;</td><td>The rest stayed the same</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;FLOW RECONCILES ✓ balanced&quot;</td><td>Cars in = cars out here</td><td><span class=no>unclear</span> — &quot;reconciles&quot; is jargon</td></tr>
+<tr><td>Page buttons 1 2 3</td><td>Jump to another intersection</td><td><span class=no>unclear</span> — numbers without street names</td></tr>
+</table></div>
+<h3>S7 Review drops — 18 shown · <span class="ok">6 clear</span> · <span class="no">12 unclear</span></h3>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/res_S7a_today.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S7a_today.jpg" alt="today"></a><figcaption>Today</figcaption></figure><figure><a href="2026-11-11-ui-audit/res_S7a_mockup.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S7a_mockup.jpg" alt="mockup"></a><figcaption>Mockup: map-27.png</figcaption></figure></div>
+<div class="card"><table><tr><th>Shown</th><th>What an engineer should read</th><th></th></tr>
+<tr><td>Title &quot;Review movements&quot;</td><td>This page lists every turning number</td><td><span class=no>unclear</span> — same title as the S6 page; the step is called Review drops</td></tr>
+<tr><td>Intro paragraph (AM (PM), drops, override, link conservation deltas)</td><td>How to read the table</td><td><span class=no>unclear</span> — four jargon terms</td></tr>
+<tr><td>Map labels &quot;725 (840)&quot; on each block</td><td>Cars on that block, AM (PM)</td><td><span class=no>unclear</span> — no unit, no direction</td></tr>
+<tr><td>Pre-balance / Post-balance switch</td><td>Counted numbers or balanced numbers</td><td><span class=no>unclear</span> — jargon</td></tr>
+<tr><td>&quot;Show direction labels&quot;, &quot;Export PNG&quot;</td><td>Map options</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Intersection chips 01 02 03</td><td>Filter to one intersection</td><td><span class=no>unclear</span> — codes, no names</td></tr>
+<tr><td>&quot;Show drops only&quot;</td><td>Only numbers that went down</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;Clamp all visible to raw&quot;</td><td>Put the dropped numbers back to what was counted</td><td><span class=no>unclear</span> — &quot;clamp&quot;, &quot;raw&quot;</td></tr>
+<tr><td>&quot;Reset all overrides&quot;</td><td>Undo my edits</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;36 of 36 movements shown&quot;</td><td>Table size</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;Drops below raw: AM 5 · PM 5&quot;</td><td>Five numbers went down in each peak</td><td><span class=no>unclear</span> — &quot;raw&quot;</td></tr>
+<tr><td>Table INT &quot;02&quot;</td><td>Which intersection</td><td><span class=no>unclear</span> — code</td></tr>
+<tr><td>Table MOVEMENT &quot;WBT&quot;</td><td>Westbound through</td><td><span class=no>unclear</span> — code</td></tr>
+<tr><td>Table RAW / BALANCED / DELTA &quot;555(790)&quot;</td><td>Counted, after balancing, change; AM (PM)</td><td><span class=no>unclear</span> — AM and PM packed in one cell, no unit</td></tr>
+<tr><td>Two OVERRIDE boxes per row</td><td>Type my own AM and PM number</td><td><span class=no>unclear</span> — unlabelled boxes</td></tr>
+<tr><td>Per-row reset button (&quot;No override to reset&quot;)</td><td>Undo this row</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;Link conservation (with overrides)&quot; tables UP / DOWN / DELTA / MODE</td><td>Neighbours still agree after my edits</td><td><span class=no>unclear</span> — jargon headers</td></tr>
+<tr><td>&quot;Continue to results →&quot;</td><td>Next step</td><td><span class=ok>clear</span></td></tr>
+</table></div>
+<h3>S7 Results — 15 shown · <span class="ok">8 clear</span> · <span class="no">7 unclear</span></h3>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/res_S7b_today.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S7b_today.jpg" alt="today"></a><figcaption>Today</figcaption></figure><figure><a href="2026-11-11-ui-audit/res_S7b_mockup.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S7b_mockup.jpg" alt="mockup"></a><figcaption>Mockup: 01_results_2nd_ave.png</figcaption></figure></div>
+<div class="card"><table><tr><th>Shown</th><th>What an engineer should read</th><th></th></tr>
+<tr><td>PERIOD AM / PM</td><td>Which peak</td><td><span class=ok>clear</span></td></tr>
+<tr><td>VIEW Combined / Balanced / Unbalanced / Delta</td><td>What the diagram numbers show</td><td><span class=no>unclear</span> — &quot;Combined&quot; and &quot;Delta&quot; not explained here</td></tr>
+<tr><td>&quot;Last run: 11/11/2026, 10:59 AM&quot;</td><td>When the numbers were made</td><td><span class=ok>clear</span></td></tr>
+<tr><td>KPI INTERSECTIONS 3</td><td>Corridor size</td><td><span class=ok>clear</span></td></tr>
+<tr><td>KPI AM ENTERING VOLUME 6,485 veh/h</td><td>Cars entering all intersections in the AM peak hour</td><td><span class=ok>clear</span> — has a unit</td></tr>
+<tr><td>KPI CONVERGED 3/3</td><td>All intersections balanced</td><td><span class=no>unclear</span> — &quot;converged&quot;</td></tr>
+<tr><td>KPI LARGEST COUNT GAP &quot;65 veh/h · WB 3 · … → 2 · …&quot;</td><td>The two counts of one block differ by 65 cars</td><td><span class=no>unclear</span> — &quot;WB 3&quot; code, no so-what</td></tr>
+<tr><td>Legend &quot;raw count (balanced volume). * marks an engineer override&quot;</td><td>How to read two numbers per arrow</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Diagram numbers &quot;90 (95)&quot;</td><td>Counted (after balancing) per turn</td><td><span class=no>unclear</span> — two numbers per arrow need the legend; no unit</td></tr>
+<tr><td>Diagram title &quot;El Cajon Blvd @ Park Blvd&quot;</td><td>Which intersection</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Circled number on each card and map pin</td><td>Intersection number</td><td><span class=no>unclear</span> — internal number</td></tr>
+<tr><td>&quot;Add a diagram note…&quot;</td><td>Write a note on the figure</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Unlabelled download icon on each card</td><td>Download this diagram</td><td><span class=no>unclear</span> — icon only</td></tr>
+<tr><td>Map with pins 1 2 3</td><td>Where the intersections are</td><td><span class=no>unclear</span> — no volumes or names on the map</td></tr>
+<tr><td>&quot;Continue to export →&quot;</td><td>Next step</td><td><span class=ok>clear</span></td></tr>
+</table></div>
+<h3>S8 Export (summary and preview) — 14 shown · <span class="ok">5 clear</span> · <span class="no">9 unclear</span></h3>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/res_S8_today.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S8_today.jpg" alt="today"></a><figcaption>Today</figcaption></figure><figure><a href="2026-11-11-ui-audit/res_S8_mockup.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_S8_mockup.jpg" alt="mockup"></a><figcaption>Mockup: 04_print_corridor_white.png</figcaption></figure></div>
+<div class="card"><table><tr><th>Shown</th><th>What an engineer should read</th><th></th></tr>
+<tr><td>Project name, Client, Analyst, Intersections, Date, Scenario</td><td>Report header</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Corridor &quot;EB/WB&quot;</td><td>Main street runs east–west</td><td><span class=no>unclear</span> — code</td></tr>
+<tr><td>Convergence &quot;AM 3/3 · PM 3/3 (0.50 veh threshold)&quot;</td><td>Balancing finished everywhere</td><td><span class=no>unclear</span> — jargon</td></tr>
+<tr><td>QC &quot;Clean&quot;</td><td>No warnings</td><td><span class=no>unclear</span> — &quot;QC&quot; unexplained; S6 still showed 5 drops</td></tr>
+<tr><td>Output file name</td><td>Name for the downloads</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Excel Workbook text (&quot;convergence log, QC flags, top adjustments&quot;)</td><td>What is in the Excel file</td><td><span class=no>unclear</span> — jargon</td></tr>
+<tr><td>Project File text</td><td>Save the project to reopen later</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Forecast Workbook text (&quot;the methods, K, … corridor VMT&quot;)</td><td>What is in the forecast Excel</td><td><span class=no>unclear</span> — K and VMT unexplained</td></tr>
+<tr><td>Corridor Line Diagram text (&quot;per-segment link-volume labels … resolved targets&quot;)</td><td>A street-long figure of volumes</td><td><span class=no>unclear</span> — jargon</td></tr>
+<tr><td>Diagram Grid Period / View dropdowns (combined, delta)</td><td>What to print</td><td><span class=no>unclear</span> — &quot;combined&quot;, &quot;delta&quot;</td></tr>
+<tr><td>&quot;AM 2 segment labels · PM 2 segment labels&quot;</td><td>How many blocks are labelled</td><td><span class=no>unclear</span> — no so-what</td></tr>
+<tr><td>Preview images</td><td>What the figure will look like</td><td><span class=no>unclear</span> — text too small to read at screen size</td></tr>
+<tr><td>&quot;Existing conditions complete — export before continuing&quot;</td><td>Save before forecasting</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Continue to Forecasting / Start new project</td><td>Next step</td><td><span class=ok>clear</span></td></tr>
+</table></div>
+<h3>F3 Run forecast (output) — 8 shown · <span class="ok">3 clear</span> · <span class="no">5 unclear</span></h3>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/res_F3_today.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_F3_today.jpg" alt="today"></a><figcaption>Today</figcaption></figure><figure><a href="2026-11-11-ui-audit/res_F3_mockup.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_F3_mockup.jpg" alt="mockup"></a><figcaption>Mockup: v7-yearcheck.png</figcaption></figure></div>
+<div class="card"><table><tr><th>Shown</th><th>What an engineer should read</th><th></th></tr>
+<tr><td>&quot;Run complete&quot; + AM / PM headings</td><td>The forecast ran</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;3 intersections&quot;</td><td>Size</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;3/3 converged&quot;</td><td>All balanced</td><td><span class=no>unclear</span> — &quot;converged&quot;</td></tr>
+<tr><td>&quot;max Pass-1 residual 1.6 veh&quot;</td><td>Engine error left over</td><td><span class=no>unclear</span> — engine term, no so-what</td></tr>
+<tr><td>&quot;no QC flags&quot;</td><td>No warnings</td><td><span class=no>unclear</span> — &quot;QC&quot;</td></tr>
+<tr><td>Warning &quot;Traffic falls on 4 approach/exit totals — kept as is (no floor) … Int 1 NB in -2.4%/yr …&quot;</td><td>Four approaches lose traffic by 2035; say why in the report</td><td><span class=no>unclear</span> — codes (Int 1 NB in/out), &quot;no floor&quot;</td></tr>
+<tr><td>&quot;10 notes&quot; fold</td><td>More detail</td><td><span class=no>unclear</span> — no hint what the notes say</td></tr>
+<tr><td>&quot;Continue to Future Results →&quot;</td><td>Next step</td><td><span class=ok>clear</span></td></tr>
+</table></div>
+<h3>F4 Future results — 17 shown · <span class="ok">4 clear</span> · <span class="no">13 unclear</span></h3>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/res_F4_today.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_F4_today.jpg" alt="today"></a><figcaption>Today</figcaption></figure><figure><a href="2026-11-11-ui-audit/res_F4_mockup.jpg"><img loading="lazy" src="2026-11-11-ui-audit/res_F4_mockup.jpg" alt="mockup"></a><figcaption>Mockup: build-nobuild-1200.png</figcaption></figure></div>
+<div class="card"><table><tr><th>Shown</th><th>What an engineer should read</th><th></th></tr>
+<tr><td>Chip &quot;Ratio (growth) · NCHRP standard turns · SANDAG · K … not used · 2025 → 2035&quot;</td><td>Method and years used</td><td><span class=no>unclear</span> — method names and K</td></tr>
+<tr><td>&quot;Show provenance&quot;</td><td>Where the numbers came from</td><td><span class=no>unclear</span> — word unclear</td></tr>
+<tr><td>Warning &quot;Traffic falls on 4 approach/exit totals …&quot; (same as F3)</td><td>Some approaches lose traffic</td><td><span class=no>unclear</span> — codes</td></tr>
+<tr><td>&quot;CORRIDOR VMT · peak hr&quot;</td><td>Vehicle-miles on the corridor in the peak hour</td><td><span class=no>unclear</span> — abbreviation</td></tr>
+<tr><td>&quot;1,319 veh-mi → 1,511 veh-mi&quot;</td><td>Driving on the corridor today vs 2035</td><td><span class=no>unclear</span> — unit jargon, no so-what</td></tr>
+<tr><td>&quot;+192 · +15%&quot;</td><td>Growth</td><td><span class=ok>clear</span></td></tr>
+<tr><td>&quot;0.92 mi · 2 links · forecast volumes × model link length&quot;</td><td>How VMT was worked out</td><td><span class=no>unclear</span> — formula text</td></tr>
+<tr><td>&quot;⚠ contains held segments&quot;</td><td>Some blocks were not forecast</td><td><span class=no>unclear</span> — &quot;held&quot; unexplained</td></tr>
+<tr><td>Demand-reduction box + &quot;Apply scenario&quot; (CAPCOA text)</td><td>Apply my own % cut to VMT</td><td><span class=no>unclear</span> — CAPCOA, VMT</td></tr>
+<tr><td>AM / PM</td><td>Which peak</td><td><span class=ok>clear</span></td></tr>
+<tr><td>Buttons 1 2 3</td><td>Which intersection</td><td><span class=no>unclear</span> — no street names</td></tr>
+<tr><td>Table MOVE &quot;NBL&quot;</td><td>Northbound left</td><td><span class=no>unclear</span> — code</td></tr>
+<tr><td>Table EXISTING / FUTURE numbers</td><td>Cars per hour today and in 2035</td><td><span class=ok>clear</span> — unit in footnote</td></tr>
+<tr><td>Table Δ* (e.g. 75 → 50 shows -28)</td><td>Change</td><td><span class=no>unclear</span> — does not equal the two numbers shown (unrounded)</td></tr>
+<tr><td>Footnote &quot;vph. Future is rounded per NCHRP 765 Table 4-8 …&quot;</td><td>Rounding rule</td><td><span class=no>unclear</span> — reference text</td></tr>
+<tr><td>2025 Existing / 2035 Forecast diagrams</td><td>The two figures side by side</td><td><span class=no>unclear</span> — labels ~8 px, unreadable</td></tr>
+<tr><td>&quot;Continue to export →&quot;</td><td>Next step</td><td><span class=ok>clear</span></td></tr>
+</table></div>
+<h2 id="rvis">2. How each results screen could show its answer (proposals, not built)</h2><p>Built from your approved mockups in <code>projects/demandiq/mockups/</code>. Pick by number.</p>
+<div class="card"><h3>R1. Results = one corridor map, not a stack of diagram cards</h3><p>The street drawn on the map, band width = vehicles per hour on each block, each signal named by its cross street. Four plain numbers on top: &quot;Vehicles in the AM peak hour 6,485 entering all 3 intersections&quot;, &quot;Biggest change from count&quot;, &quot;Biggest gap between counts&quot;, &quot;Fully balanced 3 of 3&quot;. Tap a signal and its lane-arrow diagram opens with words: &quot;Southbound · Left 180 · Thru 1,700&quot;.</p><div class="pair">
+<figure><a href="2026-11-11-ui-audit/rvis_01_results_2nd_ave.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_01_results_2nd_ave.jpg" alt="01_results_2nd_ave.png"></a><figcaption>01_results_2nd_ave.png</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/rvis_m3-27.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_m3-27.jpg" alt="m3-27.png"></a><figcaption>m3-27.png</figcaption></figure>
+</div></div>
+<div class="card"><h3>R2. Run analysis + Review drops = one &quot;Balancing report&quot; page</h3><p>One headline (&quot;Balanced: 3 things to check&quot;), the street as a line of signals with the number used for each block and the two counts it came from, a &quot;Things to check&quot; list where every item names the street and has one button, and a &quot;Biggest changes&quot; list in words. Each changed number gets &quot;Why?&quot; (one sentence with real street names) and &quot;Keep counted&quot; instead of two unlabelled override boxes. Run metadata, passes, link tables move to the Excel workbook.</p><div class="pair">
+<figure><a href="2026-11-11-ui-audit/rvis_09_balancing_report.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_09_balancing_report.jpg" alt="09_balancing_report.png"></a><figcaption>09_balancing_report.png</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/rvis_08_review_changes_why.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_08_review_changes_why.jpg" alt="08_review_changes_why.png"></a><figcaption>08_review_changes_why.png</figcaption></figure>
+</div></div>
+<div class="card"><h3>R3. Flags on the map with a plain reason</h3><p>Intersections with a drop or a big count gap get an amber ring and &quot;▼ 2 drops&quot;; tapping it shows the reason sentence. Replaces the 36-row table and the 01/02/03 chips.</p><div class="pair">
+<figure><a href="2026-11-11-ui-audit/rvis_map-27.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_map-27.jpg" alt="map-27.png"></a><figcaption>map-27.png</figcaption></figure>
+</div></div>
+<div class="card"><h3>R4. Future results = the corridor map with today vs forecast</h3><p>Same map as R1, band width = 2035 volume, each block labelled &quot;+85&quot; (growth since 2025). When a project scenario exists, split it in two colours: background growth and project trips (&quot;+85 / +35&quot;). Top number: &quot;40,170 vehicles entering, AM peak hour · +3,870 vs 2025 (+11%)&quot;.</p><div class="pair">
+<figure><a href="2026-11-11-ui-audit/rvis_m3-27.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_m3-27.jpg" alt="m3-27.png"></a><figcaption>m3-27.png</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/rvis_v6-corridor.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_v6-corridor.jpg" alt="v6-corridor.png"></a><figcaption>v6-corridor.png</figcaption></figure>
+</div></div>
+<div class="card"><h3>R5. Where the future traffic comes from, per approach</h3><p>Option A bars per approach in words (&quot;Northbound 3rd Ave 527 = 400 today + 73 background + 54 project&quot;) and Option B movement table with words, one unit header, and change columns that equal the numbers shown. Replaces NBL codes and the Δ* that does not match.</p><div class="pair">
+<figure><a href="2026-11-11-ui-audit/rvis_build-nobuild-1200.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_build-nobuild-1200.jpg" alt="build-nobuild-1200.png"></a><figcaption>build-nobuild-1200.png</figcaption></figure>
+</div></div>
+<div class="card"><h3>R6. &quot;Does it keep growing?&quot; instead of the &quot;Traffic falls&quot; banner</h3><p>Movements that go down between model years are shaded, with one plain line each: &quot;9th Ave southbound falls 3% from 2030 to 2050 — the model sends traffic to a new parallel route.&quot; Replaces &quot;Int 1 NB in -2.4%/yr … (no floor)&quot; and the &quot;10 notes&quot; fold. F3 itself then shows one sentence: &quot;Forecast ready: traffic entering the corridor grows 15% by 2035 (AM). 4 approaches lose traffic — see why&quot;.</p><div class="pair">
+<figure><a href="2026-11-11-ui-audit/rvis_v7-yearcheck.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_v7-yearcheck.jpg" alt="v7-yearcheck.png"></a><figcaption>v7-yearcheck.png</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/rvis_map-27.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_map-27.jpg" alt="map-27.png"></a><figcaption>map-27.png</figcaption></figure>
+</div></div>
+<div class="card"><h3>R7. Export figures on white paper at readable size</h3><p>Preview the printed sheet itself (white paper, arrows per lane, &quot;Southbound ↰ 58 (68)&quot;, vehicles/hour in the subtitle) at full width, instead of thumbnails with 8 px text. Each download card says in one line what the file is for.</p><div class="pair">
+<figure><a href="2026-11-11-ui-audit/rvis_04_print_corridor_white.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_04_print_corridor_white.jpg" alt="04_print_corridor_white.png"></a><figcaption>04_print_corridor_white.png</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/rvis_05_print_intersection_white.jpg"><img loading="lazy" src="2026-11-11-ui-audit/rvis_05_print_intersection_white.jpg" alt="05_print_intersection_white.png"></a><figcaption>05_print_intersection_white.png</figcaption></figure>
+</div></div>
+<h2 id="fixed">3. Basic fixes in this PR — before / after</h2><p>Shared rules first: one dropdown rule, theme colours, one phone block. Automated check over all 56 screenshots: text below the readable contrast line went from <b>248</b> to <b>4</b> (the 4 left are the disabled "Extract counts (0)" button). Console errors: 0 before and after.</p>
+<div class="card"><h3><span class="tag">B1</span>Open dropdown list unreadable: pale text on a white list.</h3><p class="mut">Every dropdown, dark theme (F1 model year, F3 both methods, S2, S4, S5, S8, model-file upload)</p><p><b>Cause:</b> Selects sit on a 2%-white see-through fill and options had no colour of their own, so Chrome on Windows paints the open list white under the light text.</p><p><b>Fix:</b> One shared rule in shell.css gives every option the theme&#x27;s solid card colour and text colour (computed option colour before: transparent; after: #151A1F with #E6EAEE text).</p>
+</div>
+<div class="card"><h3><span class="tag">B2</span>Amber, green and red text on white is too pale to read (contrast 1.6–2.9:1).</h3><p class="mut">Day theme: F1–F4 headers and step lamps, DemandIQ logo, F4 Future column and VMT, F2/F3 badges, S6 warnings, S7 drops, S3 lane pills</p><p><b>Cause:</b> Signal colours were kept identical in both themes, plus hard-coded pale amber/red in 15 rules.</p><p><b>Fix:</b> Day theme now uses darker ink of the same hues (4.5:1 or better on the grey page) with white text on filled amber/green buttons; hard-coded colours now use the theme tokens.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B2_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B2_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B2_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B2_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B3</span>White numbers on light-blue circles are faint (2.6:1).</h3><p class="mut">Dark theme: S2 list, S3 header, S4 cards, S7 cards, map pins</p><p><b>Cause:</b> Text on the accent colour was hard-coded white in 15 rules.</p><p><b>Fix:</b> New --on-accent token: dark ink on the light blue at night, white on the dark blue by day.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B3_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B3_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B3_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B3_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B4</span>Change numbers &quot;+5 ▲ / -5 ▼&quot; are dark green/red on black (2.9:1).</h3><p class="mut">S6 Review movements, dark theme</p><p><b>Cause:</b> Delta colours were the white-paper print values in both themes.</p><p><b>Fix:</b> Lighter green/red at night; print and day keep the paper values.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B4_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B4_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B4_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B4_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B5</span>Empty grey boxes next to &quot;Signalized&quot; and &quot;EB/WB&quot;.</h3><p class="mut">S2 Map, intersection list</p><p><b>Cause:</b> Projects saved before the legs field existed have no legs/cross-direction, and the list drew a box anyway.</p><p><b>Fix:</b> Blank values are skipped.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B5_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B5_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B5_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B5_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B6</span>Placeholder cut off as &quot;% reduc&quot;, next to a second % sign.</h3><p class="mut">F4 Future results, demand-reduction box</p><p><b>Cause:</b> Placeholder longer than the 150 px box.</p><p><b>Fix:</b> Placeholder is now &quot;e.g. 10&quot;; the % sign stays beside the box.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B6_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B6_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B6_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B6_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B7</span>Right 16 px of the screen cut off.</h3><p class="mut">Phone: S2–S8 (every edge-to-edge screen)</p><p><b>Cause:</b> These screens cancel the page padding with -24/-32 px margins, but phones use 16 px padding.</p><p><b>Fix:</b> On narrow screens the margins match the 16 px padding (one rule).</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B7_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B7_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B7_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B7_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B8</span>Side-by-side panes squeezed: map 100 px wide under the list, text one word per line, F2 map gone, F4 diagrams as thumbnails cut off.</h3><p class="mut">Phone: S2 map, S5 settings, S7 results, F2 network match, F4 diagrams, S6 review, S8 cards</p><p><b>Cause:</b> Desktop two-column layouts had no phone rule.</p><p><b>Fix:</b> Under 720 px the panes stack: map on top at 55% of the screen height, list or card below.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B8_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B8_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B8_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B8_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B8b</span>Settings text one word per line; peak-hour buttons cut off.</h3><p class="mut">Phone: S5 Balancing settings</p><p><b>Cause:</b> Form and summary side by side; label and buttons on one forced row.</p><p><b>Fix:</b> Stacked panes; label rows wrap.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B8b_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B8b_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B8b_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B8b_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B8c</span>Existing/forecast diagrams squeezed into 60 px thumbnails and cut off.</h3><p class="mut">Phone: F4 Future results</p><p><b>Cause:</b> Table and diagrams forced side by side.</p><p><b>Fix:</b> Diagrams go under the table, full width.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B8c_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B8c_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B8c_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B8c_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B9</span>&quot;Combined Bala…&quot;, &quot;Reset overr…&quot;, &quot;Conti…&quot; cut off at the right.</h3><p class="mut">Phone: S7 Results toolbar, S7 Review drops buttons, S3 footer</p><p><b>Cause:</b> Toolbars were fixed-height single rows.</p><p><b>Fix:</b> Toolbars and button rows wrap to a second line.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B9_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B9_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B9_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B9_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B10</span>Table text one word per line; S7 table 195 px past the card edge.</h3><p class="mut">Phone: S6 link table, S7 Review drops table</p><p><b>Cause:</b> Wide tables squeezed into 350 px.</p><p><b>Fix:</b> Wide tables keep their rows on one line and scroll sideways inside their card.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B10_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B10_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B10_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B10_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B11</span>Each count card 14 px wider than the screen.</h3><p class="mut">Phone: S4 Volume entry</p><p><b>Cause:</b> Cards had a 380 px minimum width.</p><p><b>Fix:</b> Minimum is now 380 px or the screen width, whichever is smaller.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B11_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B11_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B11_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B11_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B12</span>Red &quot;Unmatched&quot; badge 4.3:1 on its own tint.</h3><p class="mut">F2 Network match, dark theme</p><p><b>Cause:</b> #EF4444 red is slightly too dark for night.</p><p><b>Fix:</b> Night red is now Signal Flow&#x27;s own stop red #FF5A4E.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B12_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B12_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B12_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B12_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<div class="card"><h3><span class="tag">B13</span>Button &quot;Review in S7 →&quot; shows an internal screen code.</h3><p class="mut">S6 Run analysis</p><p><b>Cause:</b> Label written with the step code.</p><p><b>Fix:</b> Button now reads &quot;Review drops →&quot;.</p>
+<div class="pair"><figure><a href="2026-11-11-ui-audit/fix_B13_before.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B13_before.jpg"></a><figcaption>Before</figcaption></figure><figure><a href="2026-11-11-ui-audit/fix_B13_after.jpg"><img loading="lazy" src="2026-11-11-ui-audit/fix_B13_after.jpg"></a><figcaption>After</figcaption></figure></div>
+</div>
+<h2 id="left">4. Problems left (each needs a UX decision first)</h2><div class="card"><table><tr><th></th><th>Where</th><th>Problem</th><th>Why not fixed now</th></tr>
+<tr><td><span class="tag">L1</span></td><td>S4, S6, S7, F4 (6 screens)</td><td>Movement codes NBL, EBT, WBR and intersection codes Int 2, 01/02/03 instead of &quot;Northbound left at Texas St&quot;.</td><td>Needs one shared wording rule and an owner-approved format (proposal R5/U10), not a per-screen patch.</td></tr>
+<tr><td><span class="tag">L2</span></td><td>All results screens</td><td>AM and PM packed into one cell as &quot;555 (790)&quot; with no unit.</td><td>Layout change: two columns or a period switch (proposal U10).</td></tr>
+<tr><td><span class="tag">L3</span></td><td>F4 Future results</td><td>Δ column does not equal the two numbers shown (75 → 50 shows -28) because it uses the unrounded forecast.</td><td>Wording or data decision for the owner (proposal R5).</td></tr>
+<tr><td><span class="tag">L4</span></td><td>F4, S6, S7, S8</td><td>Diagram labels ~8 px at screen size; preview figures unreadable.</td><td>Needs bigger figures or the paper view (proposal R7).</td></tr>
+<tr><td><span class="tag">L5</span></td><td>F1, F3, F4, S5</td><td>Help text 10–11 px, long and full of method references (NCHRP §, Furness, K, CAPCOA).</td><td>Rewrite is part of the UX pass (proposal U8/U9).</td></tr>
+<tr><td><span class="tag">L6</span></td><td>S6 Run analysis</td><td>Headline &quot;All 4 links conserve ✓&quot; is amber (caution) although it reports success; the caution is about drops.</td><td>Message design (proposal R2).</td></tr>
+<tr><td><span class="tag">L7</span></td><td>Phone, every screen</td><td>The step rail (12 steps) takes ~410 px (half the screen) above every screen.</td><td>Navigation change (proposal U1).</td></tr>
+<tr><td><span class="tag">L8</span></td><td>S3 Approach config</td><td>Long names cut with &quot;…&quot; in the 240 px intersection list (full name on hover).</td><td>Acceptable on desktop; becomes moot with proposal U3.</td></tr>
+<tr><td><span class="tag">L9</span></td><td>S4 Volume entry</td><td>Disabled &quot;Extract counts (0)&quot; button is faint (2:1).</td><td>Disabled controls are allowed to be faint; better to hide it until a file is added (proposal U4).</td></tr>
+<tr><td><span class="tag">L10</span></td><td>S1 Project setup</td><td>Decorative signal animation shows &quot;Φ4/Φ8 Cross St · C = 72 s&quot; (signal-timing codes) beside the form.</td><td>Purpose decision for the owner (proposal U2).</td></tr>
+<tr><td><span class="tag">L11</span></td><td>S7 Review drops</td><td>Page title &quot;Review movements&quot; is the same as the S6 page; the step is called Review drops.</td><td>Naming is part of the merge in proposal R2.</td></tr>
+</table></div>
+<h2 id="inv">5. Every control, screen by screen, and its job</h2>
+<div class="card"><h3>S1 Project setup</h3><table>
+<tr><td>Open project file…</td><td class="mut">Reopen a project saved from Export</td></tr>
+<tr><td>Talk it through / Type instead</td><td class="mut">Fill the form by voice or by typing a description</td></tr>
+<tr><td>Project name, Client/Agency, Scenario name, Analyst initials, Date</td><td class="mut">Report header</td></tr>
+<tr><td>Project type: Corridor / Zone / Single intersection</td><td class="mut">Tells balancing whether neighbours share streets</td></tr>
+<tr><td>Analysis period: AM peak / PM peak</td><td class="mut">Which peaks you counted</td></tr>
+<tr><td>More details (project number, checker)</td><td class="mut">Optional header lines</td></tr>
+<tr><td>Save and continue</td><td class="mut">Next step</td></tr>
+<tr><td>Signal animation</td><td class="mut">Decoration, no project data</td></tr>
+</table></div>
+<div class="card"><h3>S2 Map / intersection</h3><table>
+<tr><td>Add intersection</td><td class="mut">Arm the map to drop a pin</td></tr>
+<tr><td>Undo / Redo</td><td class="mut">Undo map edits</td></tr>
+<tr><td>Search a city or address</td><td class="mut">Move the map</td></tr>
+<tr><td>Pins and link lines</td><td class="mut">Where the intersections are and which are linked</td></tr>
+<tr><td>Intersection list (drag handle, name, Signalized / 4-leg / EB/WB / NB/SB pills, bin)</td><td class="mut">Order, name and type of each intersection; delete</td></tr>
+<tr><td>Reset project</td><td class="mut">Clear everything</td></tr>
+<tr><td>Continue</td><td class="mut">Next step</td></tr>
+</table></div>
+<div class="card"><h3>S3 Approach config</h3><table>
+<tr><td>Intersection list</td><td class="mut">Pick an intersection</td></tr>
+<tr><td>− / + per approach</td><td class="mut">Number of lanes</td></tr>
+<tr><td>Lane buttons L, T, TR</td><td class="mut">Pick what each lane does</td></tr>
+<tr><td>Does not exist</td><td class="mut">Turn an approach off</td></tr>
+<tr><td>Pills &quot;3 lanes&quot;, &quot;L, T, TR&quot;</td><td class="mut">Summary of the approach</td></tr>
+<tr><td>Previous / Next</td><td class="mut">Move between intersections</td></tr>
+<tr><td>Continue to volume entry</td><td class="mut">Next step</td></tr>
+</table></div>
+<div class="card"><h3>S4 Volume entry</h3><table>
+<tr><td>Drop count files / browse</td><td class="mut">Upload vendor count sheets</td></tr>
+<tr><td>View agent instructions</td><td class="mut">See what the reader is told</td></tr>
+<tr><td>Extract counts (0)</td><td class="mut">Read the uploaded files</td></tr>
+<tr><td>Bulk paste from spreadsheet</td><td class="mut">Paste a whole block from Excel</td></tr>
+<tr><td>Count cards: movement rows × AM / PM boxes, PHF, HV %</td><td class="mut">Type or paste each turning count</td></tr>
+<tr><td>Continue to balancing</td><td class="mut">Next step</td></tr>
+</table></div>
+<div class="card"><h3>S5 Balancing settings</h3><table>
+<tr><td>Balance volumes switch</td><td class="mut">Turn balancing off to use raw counts</td></tr>
+<tr><td>Link disagreement: Larger value / Average</td><td class="mut">What to do when two counts of the same block disagree</td></tr>
+<tr><td>Corridor direction EB/WB / NB/SB</td><td class="mut">Which way the main street runs</td></tr>
+<tr><td>Peak hour mode: Corridor / Independent</td><td class="mut">One shared peak hour or one per intersection</td></tr>
+<tr><td>AM / PM window times</td><td class="mut">For the report only</td></tr>
+<tr><td>Convergence threshold, Max passes</td><td class="mut">Engine stop rules</td></tr>
+<tr><td>Locked rules (rounding, U-turns)</td><td class="mut">Read-only rules</td></tr>
+<tr><td>Advanced — per-link balance modes</td><td class="mut">Per-block exceptions</td></tr>
+<tr><td>Configuration summary panel</td><td class="mut">Repeats the settings</td></tr>
+<tr><td>Continue to analysis</td><td class="mut">Next step</td></tr>
+</table></div>
+<div class="card"><h3>S6 Run analysis</h3><table>
+<tr><td>Run analysis / Run again / Re-run with Average</td><td class="mut">Balance the counts</td></tr>
+<tr><td>Result headline and run line</td><td class="mut">Did it work</td></tr>
+<tr><td>Run metadata fold</td><td class="mut">Settings used</td></tr>
+<tr><td>Drops warning + Review drops</td><td class="mut">Numbers that went down</td></tr>
+<tr><td>Resolved link targets fold</td><td class="mut">Which count each block used</td></tr>
+<tr><td>Link conservation table</td><td class="mut">Proof neighbours agree</td></tr>
+<tr><td>Per-intersection convergence rows</td><td class="mut">How many passes each needed</td></tr>
+<tr><td>Review movements / Skip to results / Continue to review drops</td><td class="mut">Three next steps</td></tr>
+</table></div>
+<div class="card"><h3>S6 Review movements</h3><table>
+<tr><td>◀ ▶ and 1 2 3</td><td class="mut">Change intersection</td></tr>
+<tr><td>AM / PM</td><td class="mut">Change peak</td></tr>
+<tr><td>Details — show the math</td><td class="mut">Open the working</td></tr>
+<tr><td>Balanced / Changes tabs</td><td class="mut">Diagram after balancing or the changes</td></tr>
+<tr><td>What changed list</td><td class="mut">Which turning numbers changed</td></tr>
+<tr><td>Flow reconciles box</td><td class="mut">Cars in = cars out</td></tr>
+</table></div>
+<div class="card"><h3>S7 Review drops</h3><table>
+<tr><td>Back to analysis</td><td class="mut">Go back</td></tr>
+<tr><td>Map with Pre/Post-balance, direction labels, Export PNG</td><td class="mut">Block volumes on the map</td></tr>
+<tr><td>Intersection chips 01 02 03</td><td class="mut">Filter</td></tr>
+<tr><td>Show drops only</td><td class="mut">Filter to numbers that went down</td></tr>
+<tr><td>Clamp all visible to raw</td><td class="mut">Put dropped numbers back to the count</td></tr>
+<tr><td>Reset all overrides</td><td class="mut">Undo edits</td></tr>
+<tr><td>Movement table with two override boxes and a reset per row</td><td class="mut">Check and override each number</td></tr>
+<tr><td>Link conservation (with overrides)</td><td class="mut">Proof neighbours still agree</td></tr>
+<tr><td>Continue to results</td><td class="mut">Next step</td></tr>
+</table></div>
+<div class="card"><h3>S7 Results</h3><table>
+<tr><td>Period AM / PM</td><td class="mut">Change peak</td></tr>
+<tr><td>View Combined / Balanced / Unbalanced / Delta</td><td class="mut">What the diagrams show</td></tr>
+<tr><td>Four KPI tiles</td><td class="mut">Corridor summary</td></tr>
+<tr><td>Diagram card per intersection: download, note box</td><td class="mut">The deliverable figure</td></tr>
+<tr><td>Map</td><td class="mut">Where the intersections are</td></tr>
+<tr><td>Continue to export</td><td class="mut">Next step</td></tr>
+</table></div>
+<div class="card"><h3>S8 Export</h3><table>
+<tr><td>Summary card</td><td class="mut">Project header and status</td></tr>
+<tr><td>Output file name</td><td class="mut">Name for downloads</td></tr>
+<tr><td>Download .xlsx / .demandiq.json / forecast .xlsx / both .png / grid .png</td><td class="mut">The deliverables</td></tr>
+<tr><td>Diagram grid Period / View</td><td class="mut">What to print</td></tr>
+<tr><td>Corridor diagram preview</td><td class="mut">Look at the line diagram</td></tr>
+<tr><td>Start new project</td><td class="mut">Clear and start over</td></tr>
+<tr><td>Continue to Forecasting</td><td class="mut">Next phase</td></tr>
+</table></div>
+<div class="card"><h3>F1 Horizon &amp; network</h3><table>
+<tr><td>Count year / Horizon year</td><td class="mut">Years to grow from and to</td></tr>
+<tr><td>Travel model: SANDAG / Bay Area (MTC) / My model file</td><td class="mut">Which regional model</td></tr>
+<tr><td>Base / Horizon toggles + model run dropdown per network</td><td class="mut">Which model runs to compare</td></tr>
+<tr><td>Bin per network, Add network file</td><td class="mut">Remove or add a model run</td></tr>
+<tr><td>Continue to Network Match</td><td class="mut">Next step</td></tr>
+</table></div>
+<div class="card"><h3>F2 Network match</h3><table>
+<tr><td>Pull SANDAG network / Re-pull</td><td class="mut">Fetch the model roads near your intersections</td></tr>
+<tr><td>Map with legs</td><td class="mut">See which model road feeds each leg</td></tr>
+<tr><td>Intersection 1 2 3</td><td class="mut">Change intersection</td></tr>
+<tr><td>Leg cards: status, model road, heading, model volumes</td><td class="mut">Check each match</td></tr>
+<tr><td>Enter manually / Skip in balancing</td><td class="mut">Fix a leg the model does not cover</td></tr>
+<tr><td>Continue to Run Forecast</td><td class="mut">Next step</td></tr>
+</table></div>
+<div class="card"><h3>F3 Run forecast</h3><table>
+<tr><td>When counts disagree: Larger / Average</td><td class="mut">Same rule as S5, for the forecast</td></tr>
+<tr><td>How each road grows (9 methods)</td><td class="mut">Growth method</td></tr>
+<tr><td>How road forecasts become turning movements (3 methods)</td><td class="mut">Turn method</td></tr>
+<tr><td>Peak hour ÷ model period (K)</td><td class="mut">Needed by every method except Ratio</td></tr>
+<tr><td>Run forecast</td><td class="mut">Run it</td></tr>
+<tr><td>Run output cards + 10 notes</td><td class="mut">Did it work, warnings</td></tr>
+<tr><td>Continue to Future Results</td><td class="mut">Next step</td></tr>
+</table></div>
+<div class="card"><h3>F4 Future results</h3><table>
+<tr><td>Method chip + Show provenance</td><td class="mut">Which method and years</td></tr>
+<tr><td>Traffic-falls warning</td><td class="mut">Approaches that lose traffic</td></tr>
+<tr><td>Corridor VMT card</td><td class="mut">Driving on the corridor today vs future</td></tr>
+<tr><td>Demand-reduction % + Apply scenario</td><td class="mut">My own VMT cut</td></tr>
+<tr><td>AM / PM, 1 2 3</td><td class="mut">Peak and intersection</td></tr>
+<tr><td>Existing / Future / Δ table</td><td class="mut">Turning numbers</td></tr>
+<tr><td>2025 / 2035 diagrams</td><td class="mut">Figures</td></tr>
+<tr><td>Continue to export</td><td class="mut">Next step</td></tr>
+</table></div>
+<h2 id="ux">6. Bigger UX proposals (not built — pick by number)</h2><div class="card"><table>
+<tr><td><span class="tag">U1</span></td><td>All screens</td><td>Phone rail folds into one line: &quot;Step 7 of 12 · Results ▾&quot;. On desktop the rail keeps its names but drops the F1–F4 codes (Forecast steps are numbered 9–12 or carry an icon).</td></tr>
+<tr><td><span class="tag">U2</span></td><td>S1</td><td>Remove the decorative signal animation (it shows signal-timing codes and no project data) or replace it with the project&#x27;s own map once intersections exist.</td></tr>
+<tr><td><span class="tag">U3</span></td><td>S2 + S3</td><td>Merge approach setup into the map: click an intersection on the map, its approaches open on a small card beside it (house rule: no permanent side panel). The S3 page and its 240 px list go away.</td></tr>
+<tr><td><span class="tag">U4</span></td><td>S4</td><td>Show &quot;Extract counts&quot; only after a file is dropped; rows named &quot;Northbound left&quot; instead of NBL; &quot;PHF&quot; → &quot;Peak hour factor&quot;, &quot;HV %&quot; → &quot;Trucks %&quot;.</td></tr>
+<tr><td><span class="tag">U5</span></td><td>S5</td><td>Keep two questions visible (&quot;When two counts of the same block disagree: use the larger / the average&quot; and &quot;Main street runs: east–west / north–south&quot;); everything else (peak mode, windows, passes, locked rules, per-link modes) goes under &quot;Advanced&quot;.</td></tr>
+<tr><td><span class="tag">U6</span></td><td>S6 + S7 Review drops</td><td>One &quot;Balancing report&quot; page (R2) instead of three (Run analysis, Review movements, Review drops) with three competing next buttons.</td></tr>
+<tr><td><span class="tag">U7</span></td><td>F1</td><td>&quot;Horizon year&quot; → &quot;Forecast year&quot;; model runs picked automatically from the two years with one line &quot;Using SANDAG 2025 and 2035 runs&quot; and a &quot;Change&quot; link; Base/Horizon toggles hidden.</td></tr>
+<tr><td><span class="tag">U8</span></td><td>F2</td><td>Each leg card says &quot;Park Blvd, north side — matched&quot;; node numbers, headings and degree offsets go under &quot;Details&quot;. Show only legs that need a decision, with &quot;Type a volume&quot; / &quot;Leave out&quot; in plain words.</td></tr>
+<tr><td><span class="tag">U9</span></td><td>F3</td><td>Show the default method with one line on what it does; the other 8 growth methods and the turn methods go under &quot;Other methods&quot;; the K box appears only when a method needs it.</td></tr>
+<tr><td><span class="tag">U10</span></td><td>All results</td><td>One wording rule everywhere: movements in words (&quot;Westbound through&quot;), intersections by cross street, &quot;vehicles/hour&quot; on every number, AM and PM in separate columns or behind the period switch.</td></tr>
+<tr><td><span class="tag">U11</span></td><td>All screens</td><td>Minimum text size 13 px for help lines; one sentence each.</td></tr>
+<tr><td><span class="tag">U12</span></td><td>S8</td><td>Each download card: name + one line of what it is for (&quot;Excel for the report appendix&quot;); preview the printed sheet (R7).</td></tr>
+</table></div>
+<h2 id="helper">7. Guided helper — your decision of 2026-11-11 (recorded in ROADMAP)</h2><div class="card"><ol>
+<li><b>A.</b> After every click the app works out the single next action from the project state (not a fixed tour), so skipping ahead, going back or reloading still points at the right thing.</li>
+<li><b>B.</b> The website's green ring pulses around that one control, with one line using real names: "Click Union City Blvd at Jean Dr".</li>
+<li><b>C.</b> Map helpers: an arrow on the screen edge points to an off-screen target; a dotted line pulses between two pins on the same street until they are linked, then turns solid with a "linked" label.</li>
+<li><b>D.</b> Repeated work moves on by itself (after the last street's approach, straight to the next street) with progress dots like "3 of 5".</li></ol>
+<p>No AI, free. Order: basic UI fixes (this PR) → you approve the UX proposals above → a <b>video mockup</b> of the guide on every page, made on the new screens → build A + B + C + D.</p></div>
+<h2 id="nc">8. Not checked</h2><div class="card"><ul><li>The open dropdown list itself could not be screenshotted: Chrome draws it as a separate Windows popup that headless capture does not see, and a desktop capture would have grabbed the owner&#x27;s live screen. The fix is confirmed from computed colours only; please open one dropdown (F3 &quot;How each road grows&quot;) in the dark theme to confirm.</li><li>Every button was not clicked. Clicked and working: Continue on every step, Run analysis, Run again, Pull SANDAG network, Skip in balancing, Run forecast, Preview AM + PM. Not clicked: downloads, voice setup, Bay Area (MTC) and My model file paths, overrides, Clamp, Reset project.</li><li>Tablet widths (721–920 px) were not screenshotted.</li><li>Print sheets were not re-checked (only the print colours for change arrows were touched).</li></ul></div>
+<h2>All screens before the fixes (dark, desktop)</h2><div class="pair">
+<figure><a href="2026-11-11-ui-audit/all_S1.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S1.jpg"></a><figcaption>S1</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_S2.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S2.jpg"></a><figcaption>S2</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_S3.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S3.jpg"></a><figcaption>S3</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_S4.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S4.jpg"></a><figcaption>S4</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_S5.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S5.jpg"></a><figcaption>S5</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_S6a.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S6a.jpg"></a><figcaption>S6a</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_S6b.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S6b.jpg"></a><figcaption>S6b</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_S7a.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S7a.jpg"></a><figcaption>S7a</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_S7b.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S7b.jpg"></a><figcaption>S7b</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_S8.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_S8.jpg"></a><figcaption>S8</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_F1.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_F1.jpg"></a><figcaption>F1</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_F2.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_F2.jpg"></a><figcaption>F2</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_F3.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_F3.jpg"></a><figcaption>F3</figcaption></figure>
+<figure><a href="2026-11-11-ui-audit/all_F4.jpg"><img loading="lazy" src="2026-11-11-ui-audit/all_F4.jpg"></a><figcaption>F4</figcaption></figure>
+</div></main></body></html>
