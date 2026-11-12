@@ -4,9 +4,10 @@ DemandIQ — Count Agent (with reference examples)
 Claude-based universal count file extractor.
 Reads Excel, PDF, CSV from any vendor. Returns structured JSON.
 
-Now uses your training_data.jsonl as reference examples — Claude sees
-8-10 of your confirmed correct extractions on every call, organized by
-vendor for best pattern matching.
+Uses reference examples — Claude sees 8 known-correct extractions on every
+call, organized by vendor layout for best pattern matching. The committed
+examples (reference_examples.jsonl) are synthetic look-alikes; the owner's real
+confirmed examples are added when THIRD_PARTY_DIR holds them (local runs).
 
 Higher accuracy than generic Claude. No fine-tuning needed.
 """
@@ -25,7 +26,11 @@ MAX_CHARS  = 200000
 MAX_PDF_PAGES = 40
 
 # Reference examples settings
-EXAMPLES_FILE        = Path(__file__).parent / "training_data.jsonl"
+# Raw third-party files live outside the repo (Docs/third-party-files.md).
+THIRD_PARTY_DIR = Path(os.environ.get("THIRD_PARTY_DIR") or
+                       Path.home() / "Workspace" / "projects" / "demandiq" / "third-party-private")
+EXAMPLES_FILES = (Path(__file__).parent / "reference_examples.jsonl",       # synthetic, committed
+                  THIRD_PARTY_DIR / "backend" / "training_data.jsonl")       # real, optional, local
 NUM_EXAMPLES_PER_CALL = 8        # how many examples to pass per call
 MAX_EXAMPLE_CHARS     = 4000     # truncate each example to keep prompts small
 
@@ -40,49 +45,49 @@ MOVEMENTS = [
 _examples_cache = None
 
 def load_examples():
-    """Load training_data.jsonl into memory once. Returns list of examples."""
+    """Load the reference-example files into memory once. Returns list of examples."""
     global _examples_cache
     if _examples_cache is not None:
         return _examples_cache
 
-    if not Path(EXAMPLES_FILE).exists():
-        _examples_cache = []
-        return []
-
     examples = []
-    with open(EXAMPLES_FILE, encoding='utf-8') as f:
-        for line in f:
+    lines = []
+    for path in EXAMPLES_FILES:
+        if Path(path).exists():
+            with open(path, encoding='utf-8') as f:
+                lines += f.readlines()
+    for line in lines:
+        try:
+            ex = json.loads(line)
+            # Each line has messages[user, assistant]
+            msgs = ex.get('messages', [])
+            user_msg = next((m['content'] for m in msgs if m['role']=='user'), '')
+            asst_msg = next((m['content'] for m in msgs if m['role']=='assistant'), '')
+
+            # Try to detect vendor from assistant response
+            vendor = 'Unknown'
             try:
-                ex = json.loads(line)
-                # Each line has messages[user, assistant]
-                msgs = ex.get('messages', [])
-                user_msg = next((m['content'] for m in msgs if m['role']=='user'), '')
-                asst_msg = next((m['content'] for m in msgs if m['role']=='assistant'), '')
+                asst_data = json.loads(asst_msg)
+                vendor = ex.get('vendor') or asst_data.get('vendor_detected', 'Unknown')
+            except: pass
 
-                # Try to detect vendor from assistant response
-                vendor = 'Unknown'
-                try:
-                    asst_data = json.loads(asst_msg)
-                    vendor = asst_data.get('vendor_detected', 'Unknown')
-                except: pass
+            # Truncate huge file content to keep prompts manageable
+            if len(user_msg) > MAX_EXAMPLE_CHARS:
+                user_msg = user_msg[:MAX_EXAMPLE_CHARS] + "\n... [truncated]"
 
-                # Truncate huge file content to keep prompts manageable
-                if len(user_msg) > MAX_EXAMPLE_CHARS:
-                    user_msg = user_msg[:MAX_EXAMPLE_CHARS] + "\n... [truncated]"
-
-                examples.append({
-                    'vendor': vendor,
-                    'input':  user_msg,
-                    'output': asst_msg,
-                })
-            except: continue
+            examples.append({
+                'vendor': vendor,
+                'input':  user_msg,
+                'output': asst_msg,
+            })
+        except: continue
 
     _examples_cache = examples
     return examples
 
 def _normalize_vendor(name):
     """Map a free-text vendor hint to the canonical label used in
-    training_data.jsonl's vendor_detected field. Accepts e.g.
+    reference examples' vendor tag. Accepts e.g.
     'GRAM Traffic' → 'GRAM', 'pape dawson' → 'Pape-Dawson'."""
     if not name:
         return None

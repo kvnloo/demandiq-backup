@@ -20,6 +20,7 @@ TESTS=(
   test_qc_backend_fixes
   test_jev
   test_voice
+  test_samples
 )
 
 fails=0

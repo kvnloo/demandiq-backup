@@ -112,7 +112,7 @@ expected, not a regression.
 Every Forger-generated PDF (`harness/forger/`) carries
 `forger-synthetic=true` in its PDF metadata (Subject and Keywords). The
 rule: **Forger sheets must never enter any extraction fine-tuning or
-reference-example corpus** (`backend/training_data.jsonl`, the labeling
+reference-example corpus** (`backend/reference_examples.jsonl`, the owner's local `training_data.jsonl`, the labeling
 pipeline in `backend/tools/populate_labels.py`, or any future corpus) — a
 model must not be trained on its own exam, or every Forger verdict
 afterwards measures memorization instead of extraction. Anyone bulk-adding

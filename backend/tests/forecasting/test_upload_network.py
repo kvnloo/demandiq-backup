@@ -1,12 +1,13 @@
 """The engineer's own model file: upload → check columns → ingest → run.
 
-The equivalence tests push tiny clipped copies of the real SANDAG 2025/2050
-files (fixtures/, built by fixtures/make_fixtures.py) through the upload path
-and require the same matches and the same /forecast/run numbers as the
+The equivalence tests push a synthetic network in the SANDAG hwyLoad schema
+(tests/fixtures/samples/network, built by make_samples.py) through the upload
+path and require the same matches and the same /forecast/run numbers as the
 built-in SANDAG adapter reading the same files.
 """
 
 import io
+import json
 import os
 import zipfile
 from pathlib import Path
@@ -24,14 +25,15 @@ from forecasting.api import router  # noqa: E402
 from forecasting.ingest import ingest_networks  # noqa: E402
 from forecasting.matcher import match_network_to_legs  # noqa: E402
 
-FIX = Path(__file__).resolve().parent / "fixtures"
+SAMPLES = Path(__file__).resolve().parents[1] / "fixtures" / "samples"
+FIX = SAMPLES / "network"
+NET = json.loads((SAMPLES / "expected.json").read_text())["network"]
 app = FastAPI()
 app.include_router(router, prefix="/forecast")
 client = TestClient(app)
 
-# El Cajon Blvd & 54th St, and & 56th St — real SANDAG node coordinates.
-INTX = [{"num": 1, "lat": 32.757826806, "lng": -117.079354781},
-        {"num": 2, "lat": 32.758455724, "lng": -117.074917396}]
+# The two SAMPLE BLVD intersections — node coordinates of the synthetic network.
+INTX = NET["intersections"]
 COUNTS = {"NBL": 60, "NBT": 300, "NBR": 40, "SBL": 50, "SBT": 280, "SBR": 35,
           "EBL": 55, "EBT": 480, "EBR": 35, "WBL": 50, "WBT": 450, "WBR": 45}
 SHP_PARTS = (".shp", ".shx", ".dbf", ".prj", ".cpg")
@@ -67,7 +69,7 @@ def test_zip_upload_ok_and_reports_columns():
     r = _post([("files", ("network_2025.zip", (FIX / "renamed_2025.zip").read_bytes()))])
     assert r.status_code == 200, r.text
     b = r.json()
-    assert b["format"] == "Shapefile" and b["feature_count"] == 147
+    assert b["format"] == "Shapefile" and b["feature_count"] == NET["feature_count"]
     assert b["crs"].endswith("2230") or "2230" in b["crs"]
     assert b["intersections_outside"] == []
     lng0, lat0, lng1, lat1 = b["bounds_4326"]
@@ -76,6 +78,13 @@ def test_zip_upload_ok_and_reports_columns():
     assert f["AM_AB_VOL"]["type"] == "number" and f["STREET"]["type"] == "text"
     assert f["STREET"]["sample"]
     assert (upload.UPLOAD_ROOT / b["upload_id"] / "layer.shp").exists()
+
+
+def test_model_drop_zip_is_read_as_sandag():
+    """model-drop/<year>.zip layout: <year>/hwyLoad.* inside one zip."""
+    r = _post([("files", ("2035.zip", (FIX / "model_drop_2035.zip").read_bytes()))])
+    assert r.status_code == 200, r.text
+    assert r.json()["schema"] == "SANDAG" and r.json()["feature_count"] == NET["feature_count"]
 
 
 def test_parts_upload_ok_and_flags_outside_intersections():
@@ -336,3 +345,19 @@ def test_one_way_records_are_paired(tmp_path):
     inbound = lambda body: [{d: leg["inbound"] and (leg["inbound"]["AM"], leg["inbound"]["PM"])  # noqa: E731
                              for d, leg in m["legs"].items()} for m in body["matches"]]
     assert inbound(r.json()) == inbound(built)
+
+
+# ── Local-only: the real clipped SANDAG files, kept outside the repo ─────────
+from count_agent import THIRD_PARTY_DIR  # noqa: E402
+
+RAW = THIRD_PARTY_DIR / "backend" / "tests" / "forecasting" / "fixtures"
+
+
+@pytest.mark.skipif(not (RAW / "renamed_2025.zip").exists(),
+                    reason="raw SANDAG clip not in THIRD_PARTY_DIR (third-party file, local-only)")
+def test_real_sandag_clip_still_uploads():
+    for name, schema in (("renamed_2025.zip", None), ("renamed_2050.zip", None)):
+        r = _post([("files", (name, (RAW / name).read_bytes()))])
+        assert r.status_code == 200, r.text
+        assert r.json()["feature_count"] == 147 and r.json()["schema"] is schema
+        assert r.json()["mapping"]["connector_values"] == ["Zone Connector"]
