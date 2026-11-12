@@ -6,8 +6,9 @@ Goals and step order: [ROADMAP.md](ROADMAP.md). Repo rules: [../CLAUDE.md](../CL
 ## Now (2026-11-11)
 
 **Where it stands**
-- Open PRs: #29 (preview), #30 (hosting on the home PC), #32 (free reader), and `fix/ui-basics` (UI audit +
-  basic readability fixes). Everything else is on `main`.
+- Open PRs: #29 (kvnloo preview bundle) and #30 (hosting on the home PC, another session). Merged 2026-11-11:
+  #33 basic UI fixes + audit, #32 free count-file reader (owner: diagram turns flagged for the engineer, startup
+  warning when the API key is missing, Docling dropped; `Docs/free-reader.md`).
 - CI on `main` is green: backend suite, Examiner harness (schema drift + detectors), frontend lint and unit tests.
   The nightly deep fuzz run passes.
 - Not live anywhere. The website card has `url: null`, and nothing is deployed to Render.
@@ -34,21 +35,19 @@ Goals and step order: [ROADMAP.md](ROADMAP.md). Repo rules: [../CLAUDE.md](../CL
 - **Jev name matching.** Merged. Suggest-only, and the app behaves the same without a key.
 
 - **UI (audit 2026-11-11).** Every screen walked in both themes at desktop and phone with a demo corridor
-  (El Cajon Blvd, SANDAG 2025 → 2035). Basic fixes are in PR `fix/ui-basics`: unreadable dropdown lists, pale
+  (El Cajon Blvd, SANDAG 2025 → 2035). Basic fixes merged (#33): unreadable dropdown lists, pale
   signal colours on the day theme, faint numbers on blue circles, phone screens cut off or squeezed. The bigger UX
   changes are proposals only, in `Docs/research/2026-11-11-ui-audit.html` (results screens first).
 
 **Next steps, in order**
-1. Owner reads the UI audit and merges `fix/ui-basics`.
-2. Owner approves the UX proposals in the audit (results screens first); build only the approved ones.
-3. Video mockup of the guided helper running on every page, on the new screens (ROADMAP "Guided helper").
-   Owner approves it before any guide code.
-4. Build the guided helper: A (next action from project state) + B (green ring + one plain line) + C (map
-   arrows and link lines) + D (auto-advance with "3 of 5" dots).
-5. Free PDF reader + code checks + cloud fallback (owner decision 2026-11-10, ROADMAP "Reading count files"):
-   PR #32 builds the free reader; score it on the Forger (text + scanned sheets) and the demo PDFs, report before switching.
-6. Run the Forger's live Claude check once an API key is on the PC.
-7. Deploy (ROADMAP step 6) once the owner says go.
+1. Build the approved UX redesign (owner 2026-11-11: all 5 top proposals in `Docs/research/2026-11-11-ui-audit.html`):
+   R1 results as one corridor map, R2 one Balancing report page with "Why?" / "Keep counted", R4/R5 future results
+   map with background vs project growth, U10 one wording rule (no movement codes, cross-street names, veh/h, AM and
+   PM separate), U5/U1 two-question balancing settings + one-line step list on phones. Screenshots to the owner per screen.
+2. Video mockup of the guided helper on every page, on the new screens. Owner approves it before any guide code.
+3. Build the guided helper: A + B + C + D (ROADMAP "Guided helper").
+4. Run the Forger's live Claude check once an API key is on the PC.
+5. Deploy (ROADMAP step 6) once the owner says go.
 
 **Blocked on the owner**
 - "Go" for deploying DemandIQ. It's a Python server, so it needs a home machine behind Cloudflare Tunnel or a

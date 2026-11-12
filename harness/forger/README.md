@@ -25,6 +25,9 @@ python3.12 -m harness.forger.batch --n 20 --style D        # bounded batch
 python3.12 -m harness.forger.batch --n 10 --style both
 python3.12 -m harness.forger.batch --n 1 --style D --repeat 5   # variance
 
+# the free code reader instead of the API (no cost); scores in Docs/free-reader.md:
+python3.12 -m harness.forger.free_batch --n 50
+
 # offline acceptance suite (no API, no cost):
 python3.12 -m pytest harness/forger/tests -q
 ```

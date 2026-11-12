@@ -1,0 +1,2 @@
+# PDFs are binary: autocrlf on Windows checkouts would break their byte offsets.
+*.pdf binary
