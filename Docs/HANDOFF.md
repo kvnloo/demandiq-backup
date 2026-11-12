@@ -13,8 +13,9 @@ Goals and step order: [ROADMAP.md](ROADMAP.md). Repo rules: [../CLAUDE.md](../CL
 - Not live anywhere. The website card has `url: null`, and nothing is deployed to Render.
 
 **By area**
-- **Existing counts (S1–S8).** Reading: Claude Sonnet 4.5 (`backend/count_agent.py`), given 8 of the
-  204 confirmed examples in `backend/training_data.jsonl`. Balancing: code (`backend/balancer.py`).
+- **Existing counts (S1–S8).** Reading: Claude Sonnet 4.5 (`backend/count_agent.py`), given 8 reference
+  examples: 48 synthetic ones in `backend/reference_examples.jsonl`, plus the owner's 204 real ones when
+  `THIRD_PARTY_DIR` has them (local only; `Docs/third-party-files.md`). Balancing: code (`backend/balancer.py`).
   Every bug the 4-checker pre-launch QC found is fixed (#23). Tolerance is in vehicles: old % values under 0.1
   are read as 0.5 veh.
 - **Accuracy gap (fixed, PR #28).** The corridor through at a T-intersection used to take every
@@ -23,8 +24,8 @@ Goals and step order: [ROADMAP.md](ROADMAP.md). Repo rules: [../CLAUDE.md](../CL
   Owner kept the floating side street and the "larger" link rule (`Docs/through-inflation-fix.md`).
 - **Forecasting (F1–F4).** SANDAG (base year + 2035, 2050), Bay Area MTC, HPMS statewide, and the user's own model file.
   The unpacked model data (`data/sandag`, `data/hpms`, `data/mtc`, ~93 MB) is gitignored, so a clean clone or
-  the Docker image can't forecast until it's added. The SANDAG 2022/2035/2050 zips (~20 MB each) are committed
-  in `model-drop/`.
+  the Docker image can't forecast until it's added. The SANDAG 2022/2035/2050 zips (~20 MB each) are on the
+  owner's disk (`THIRD_PARTY_DIR/model-drop/`), not in the repo.
 - **Harness.** The Examiner (known answers for balancing, tiers A–D) works. The Forger (known answers for PDF reading)
   is built, but its live check needs API credits:
   `python3.12 -m harness.forger.batch --n 20 --style D`.

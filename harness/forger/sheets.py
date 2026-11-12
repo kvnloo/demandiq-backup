@@ -153,7 +153,7 @@ def render_pdf(sheet):
 # ── Style T: NDS/Quality Counts-like tabular sheet ──────────────────────────
 
 # Column order mirrors the NDS convention (approach-major, L/T/R/U per
-# approach, per-interval TOTAL last) seen in training_data.jsonl example 1.
+# approach, per-interval TOTAL last) seen in real NDS reports.
 _T_COLS = ['NL', 'NT', 'NR', 'NU', 'SL', 'ST', 'SR', 'SU',
            'EL', 'ET', 'ER', 'EU', 'WL', 'WT', 'WR', 'WU']
 _T_COL_TO_MV = {'N': 'NB', 'S': 'SB', 'E': 'EB', 'W': 'WB'}

@@ -2,6 +2,8 @@
 
 Start with **[HANDOFF.md](HANDOFF.md)** (where things stand, next steps) and **[ROADMAP.md](ROADMAP.md)** (goal and step order).
 
+Third-party files (vendor count reports, model output) are not in the repo: **[third-party-files.md](third-party-files.md)**.
+
 ## `demandiq_tour/`
 
 Working artifacts from the F1–F8 v1 → v2 refinement cycle. Moved in-repo from
