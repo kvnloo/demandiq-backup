@@ -9,7 +9,7 @@
 .di-fc .di-pill--selected {
   background: var(--signal-amber);
   border-color: var(--signal-amber);
-  color: #1A1205;                 /* dark ink on amber — legible in both themes */
+  color: var(--on-amber);
 }
 
 .di-fc .di-input:focus {
@@ -28,7 +28,7 @@
   border-radius: 8px;
   border: none;
   background: var(--signal-amber);
-  color: #1A1205;
+  color: var(--on-amber);
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 14px;

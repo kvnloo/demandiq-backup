@@ -22,7 +22,7 @@
   border-radius: 8px;
   background: rgba(255, 182, 39, 0.08);
   border: 1px solid rgba(255, 182, 39, 0.4);
-  color: #FFD27A;
+  color: var(--amber);
   font-size: 12px;
 }
 .di-s4__footer {
@@ -164,7 +164,7 @@
 }
 .di-up-file__icon { color: var(--text-tertiary); flex-shrink: 0; }
 .di-up-file__icon--ok { color: #34D399; }
-.di-up-file__icon--err { color: #FF6B6B; }
+.di-up-file__icon--err { color: var(--stop); }
 .di-up-file__name {
   flex: 1;
   color: var(--text-primary);
@@ -191,7 +191,7 @@
 .di-up-file__remove:hover { color: var(--text-primary); background: var(--bg-hover); }
 
 /* ── Volume grid ─────────────────────────────────────────────────────── */
-.di-vol-wrap { width: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 18px; align-items: start; }
+.di-vol-wrap { width: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); gap: 18px; align-items: start; }
 .di-vol-hint { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); }
 
 /* ── Transposed per-intersection volume card (movement rows × AM/PM cols) ── */
@@ -297,7 +297,7 @@ td.di-vol-dir {
 .di-vol-meta__num {
   display: inline-block;
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   width: 22px;
   height: 22px;
   line-height: 22px;
@@ -599,7 +599,7 @@ td.di-vol-dir {
   height: 32px;
   padding: 0 14px;
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   border-radius: 6px;
   font-size: 12px;
