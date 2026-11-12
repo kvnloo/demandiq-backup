@@ -27,7 +27,7 @@ try:
 except ImportError:
     sys.exit("Run: pip install openpyxl --break-system-packages")
 
-from count_agent import read_file, SYSTEM_PROMPT
+from count_agent import read_file, SYSTEM_PROMPT, THIRD_PARTY_DIR
 
 MOVEMENTS = [
     'EBU','EBL','EBT','EBR',
@@ -222,8 +222,9 @@ def export(labels_path, output_path, files_root=None, append=False):
 
 def main():
     p = argparse.ArgumentParser(description="Export confirmed labels to training JSONL")
-    p.add_argument('labels', nargs='?', default="labels_template.xlsx")
-    p.add_argument('output', nargs='?', default="training_data.jsonl")
+    # Defaults stay outside the repo: real labels and examples quote real count files.
+    p.add_argument('labels', nargs='?', default=str(THIRD_PARTY_DIR / "backend" / "tools" / "labels_template.xlsx"))
+    p.add_argument('output', nargs='?', default=str(THIRD_PARTY_DIR / "backend" / "training_data.jsonl"))
     p.add_argument('--append-confirmed', action='store_true', dest='append',
                    help="Append only new confirmed rows (dedupe by file_name+intersection)")
     p.add_argument('--files-root', help="Folder containing the source count files")

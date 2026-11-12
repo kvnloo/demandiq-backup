@@ -6,6 +6,10 @@ exists or should be added until the triggers below are met.
 
 ## Current state
 
+> Since 2026-11-12 the real `training_data.jsonl` and `labels_template.xlsx`
+> live outside the repo in `THIRD_PARTY_DIR`; the repo ships 48 synthetic
+> examples (`backend/reference_examples.jsonl`). See `Docs/third-party-files.md`.
+
 - **Path A (in-context, live today).** Claude reads the file plus 8
   vendor-matched reference examples drawn from `training_data.jsonl` on
   every call. Confirmed labels feed back via

@@ -64,13 +64,13 @@ def synthetic_sandag_gdf(anchor_2230):
              ba=dict(EA=700, AM=2100, MD=1400, PM=2800, EV=1100),
              geometry=LineString([N1, N2])),
         # 2. Major Arterial.
-        dict(hwycov_id=101, from_node=200, to_node=201, link_name="El Camino Real",
+        dict(hwycov_id=101, from_node=200, to_node=201, link_name="Sample Blvd",
              fc_desc="Major Arterial", ab_am_lane=3, ba_am_lane=3, post_speed=45,
              ab=dict(EA=300, AM=900, MD=700, PM=1100, EV=500),
              ba=dict(EA=280, AM=850, MD=680, PM=1050, EV=480),
              geometry=LineString([N2, N3])),
         # 3. Collector (Local Collector → Collector).
-        dict(hwycov_id=102, from_node=201, to_node=202, link_name="Oakwood Dr",
+        dict(hwycov_id=102, from_node=201, to_node=202, link_name="Example Dr",
              fc_desc="Local Collector", ab_am_lane=2, ba_am_lane=2, post_speed=30,
              ab=dict(EA=100, AM=300, MD=250, PM=350, EV=150),
              ba=dict(EA=90, AM=280, MD=240, PM=330, EV=140),
