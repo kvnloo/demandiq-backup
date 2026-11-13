@@ -47,10 +47,8 @@ jobs:
       - name: Test suite
         # The runner exposes the interpreter as `python`, not `python3.12`.
         env:
-          # app.py raises at import if ANTHROPIC_API_KEY is unset. The suites
-          # import app to test /balance-nchrp (pure math) — they never call
-          # Anthropic (only /api/extract does, at app.py:111), so a placeholder
-          # satisfies the import check with zero real API calls.
+          # Placeholder key: the suites never call Anthropic (the cloud reader
+          # is stubbed in test_free_reader), so zero real API calls are made.
           ANTHROPIC_API_KEY: placeholder-not-used-by-tested-endpoints
         run: PYTHON=python ./run_tests.sh
       - name: Forecasting + fuzz suite (pytest)

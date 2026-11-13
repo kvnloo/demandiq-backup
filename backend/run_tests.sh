@@ -20,6 +20,8 @@ TESTS=(
   test_qc_backend_fixes
   test_jev
   test_voice
+  test_read_checks
+  test_free_reader
   test_samples
 )
 
