@@ -1,0 +1,468 @@
+{
+ "seed": 2026,
+ "files": {
+  "tabular15_1.xlsx": {
+   "vendor_detected": "Sample Counts Co.",
+   "intersections": [
+    {
+     "name": "Demo Rd & Placeholder Blvd",
+     "am_peak_start": "07:45",
+     "pm_peak_start": "17:00",
+     "volumes": {
+      "AM": {
+       "EBU": 7,
+       "EBL": 99,
+       "EBT": 327,
+       "EBR": 137,
+       "WBU": 0,
+       "WBL": 76,
+       "WBT": 477,
+       "WBR": 21,
+       "NBU": 16,
+       "NBL": 110,
+       "NBT": 832,
+       "NBR": 37,
+       "SBU": 0,
+       "SBL": 191,
+       "SBT": 1669,
+       "SBR": 53
+      },
+      "PM": {
+       "EBU": 13,
+       "EBL": 204,
+       "EBT": 713,
+       "EBR": 135,
+       "WBU": 14,
+       "WBL": 73,
+       "WBT": 1467,
+       "WBR": 214,
+       "NBU": 9,
+       "NBL": 38,
+       "NBT": 438,
+       "NBR": 125,
+       "SBU": 6,
+       "SBL": 211,
+       "SBT": 370,
+       "SBR": 112
+      }
+     },
+     "phf": {
+      "AM": 0.888,
+      "PM": 0.947
+     },
+     "hv_pct": {
+      "AM": 2.5,
+      "PM": 2.4
+     }
+    }
+   ]
+  },
+  "tabular15_1.pdf": {
+   "vendor_detected": "Sample Counts Co.",
+   "intersections": [
+    {
+     "name": "Demo Rd & Placeholder Blvd",
+     "am_peak_start": "07:45",
+     "pm_peak_start": "17:00",
+     "volumes": {
+      "AM": {
+       "EBU": 7,
+       "EBL": 99,
+       "EBT": 327,
+       "EBR": 137,
+       "WBU": 0,
+       "WBL": 76,
+       "WBT": 477,
+       "WBR": 21,
+       "NBU": 16,
+       "NBL": 110,
+       "NBT": 832,
+       "NBR": 37,
+       "SBU": 0,
+       "SBL": 191,
+       "SBT": 1669,
+       "SBR": 53
+      },
+      "PM": {
+       "EBU": 13,
+       "EBL": 204,
+       "EBT": 713,
+       "EBR": 135,
+       "WBU": 14,
+       "WBL": 73,
+       "WBT": 1467,
+       "WBR": 214,
+       "NBU": 9,
+       "NBL": 38,
+       "NBT": 438,
+       "NBR": 125,
+       "SBU": 6,
+       "SBL": 211,
+       "SBT": 370,
+       "SBR": 112
+      }
+     },
+     "phf": {
+      "AM": 0.888,
+      "PM": 0.947
+     },
+     "hv_pct": {
+      "AM": 2.5,
+      "PM": 2.4
+     }
+    }
+   ]
+  },
+  "tabular15_2.xlsx": {
+   "vendor_detected": "Sample Counts Co.",
+   "intersections": [
+    {
+     "name": "Test Ave & Placeholder Blvd",
+     "am_peak_start": "08:00",
+     "pm_peak_start": "16:15",
+     "volumes": {
+      "AM": {
+       "EBU": 0,
+       "EBL": 271,
+       "EBT": 248,
+       "EBR": 191,
+       "WBU": 0,
+       "WBL": 56,
+       "WBT": 377,
+       "WBR": 36,
+       "NBU": 0,
+       "NBL": 209,
+       "NBT": 696,
+       "NBR": 108,
+       "SBU": 0,
+       "SBL": 69,
+       "SBT": 1430,
+       "SBR": 42
+      },
+      "PM": {
+       "EBU": 0,
+       "EBL": 144,
+       "EBT": 1671,
+       "EBR": 104,
+       "WBU": 0,
+       "WBL": 142,
+       "WBT": 1387,
+       "WBR": 84,
+       "NBU": 0,
+       "NBL": 124,
+       "NBT": 81,
+       "NBR": 169,
+       "SBU": 0,
+       "SBL": 184,
+       "SBT": 297,
+       "SBR": 143
+      }
+     },
+     "phf": {
+      "AM": 0.956,
+      "PM": 0.954
+     },
+     "hv_pct": {
+      "AM": 3.0,
+      "PM": 2.7
+     }
+    }
+   ]
+  },
+  "tabular15_2.pdf": {
+   "vendor_detected": "Sample Counts Co.",
+   "intersections": [
+    {
+     "name": "Test Ave & Placeholder Blvd",
+     "am_peak_start": "08:00",
+     "pm_peak_start": "16:15",
+     "volumes": {
+      "AM": {
+       "EBU": 0,
+       "EBL": 271,
+       "EBT": 248,
+       "EBR": 191,
+       "WBU": 0,
+       "WBL": 56,
+       "WBT": 377,
+       "WBR": 36,
+       "NBU": 0,
+       "NBL": 209,
+       "NBT": 696,
+       "NBR": 108,
+       "SBU": 0,
+       "SBL": 69,
+       "SBT": 1430,
+       "SBR": 42
+      },
+      "PM": {
+       "EBU": 0,
+       "EBL": 144,
+       "EBT": 1671,
+       "EBR": 104,
+       "WBU": 0,
+       "WBL": 142,
+       "WBT": 1387,
+       "WBR": 84,
+       "NBU": 0,
+       "NBL": 124,
+       "NBT": 81,
+       "NBR": 169,
+       "SBU": 0,
+       "SBL": 184,
+       "SBT": 297,
+       "SBR": 143
+      }
+     },
+     "phf": {
+      "AM": 0.956,
+      "PM": 0.954
+     },
+     "hv_pct": {
+      "AM": 3.0,
+      "PM": 2.7
+     }
+    }
+   ]
+  },
+  "rolling5_1.csv": {
+   "vendor_detected": "Sample Counts Co.",
+   "intersections": [
+    {
+     "name": "Demo Rd & Fixture Way",
+     "am_peak_start": null,
+     "pm_peak_start": "16:35",
+     "volumes": {
+      "AM": {
+       "EBU": null,
+       "EBL": null,
+       "EBT": null,
+       "EBR": null,
+       "WBU": null,
+       "WBL": null,
+       "WBT": null,
+       "WBR": null,
+       "NBU": null,
+       "NBL": null,
+       "NBT": null,
+       "NBR": null,
+       "SBU": null,
+       "SBL": null,
+       "SBT": null,
+       "SBR": null
+      },
+      "PM": {
+       "EBU": 0,
+       "EBL": 131,
+       "EBT": 93,
+       "EBR": 191,
+       "WBU": 0,
+       "WBL": 148,
+       "WBT": 178,
+       "WBR": 45,
+       "NBU": 0,
+       "NBL": 140,
+       "NBT": 1229,
+       "NBR": 99,
+       "SBU": 0,
+       "SBL": 212,
+       "SBT": 1638,
+       "SBR": 173
+      }
+     },
+     "phf": {
+      "AM": null,
+      "PM": 0.89
+     },
+     "hv_pct": {
+      "AM": null,
+      "PM": 2.1
+     }
+    }
+   ]
+  },
+  "rolling5_1.pdf": {
+   "vendor_detected": "Sample Counts Co.",
+   "intersections": [
+    {
+     "name": "Demo Rd & Fixture Way",
+     "am_peak_start": null,
+     "pm_peak_start": "16:35",
+     "volumes": {
+      "AM": {
+       "EBU": null,
+       "EBL": null,
+       "EBT": null,
+       "EBR": null,
+       "WBU": null,
+       "WBL": null,
+       "WBT": null,
+       "WBR": null,
+       "NBU": null,
+       "NBL": null,
+       "NBT": null,
+       "NBR": null,
+       "SBU": null,
+       "SBL": null,
+       "SBT": null,
+       "SBR": null
+      },
+      "PM": {
+       "EBU": 0,
+       "EBL": 131,
+       "EBT": 93,
+       "EBR": 191,
+       "WBU": 0,
+       "WBL": 148,
+       "WBT": 178,
+       "WBR": 45,
+       "NBU": 0,
+       "NBL": 140,
+       "NBT": 1229,
+       "NBR": 99,
+       "SBU": 0,
+       "SBL": 212,
+       "SBT": 1638,
+       "SBR": 173
+      }
+     },
+     "phf": {
+      "AM": null,
+      "PM": 0.89
+     },
+     "hv_pct": {
+      "AM": null,
+      "PM": 2.1
+     }
+    }
+   ]
+  },
+  "rolling5_2.csv": {
+   "vendor_detected": "Sample Counts Co.",
+   "intersections": [
+    {
+     "name": "Demo Rd & Specimen Dr",
+     "am_peak_start": "07:20",
+     "pm_peak_start": null,
+     "volumes": {
+      "AM": {
+       "EBU": 0,
+       "EBL": 186,
+       "EBT": 392,
+       "EBR": 187,
+       "WBU": 0,
+       "WBL": 178,
+       "WBT": 452,
+       "WBR": 214,
+       "NBU": 0,
+       "NBL": 247,
+       "NBT": 1473,
+       "NBR": 105,
+       "SBU": 0,
+       "SBL": 270,
+       "SBT": 591,
+       "SBR": 85
+      },
+      "PM": {
+       "EBU": null,
+       "EBL": null,
+       "EBT": null,
+       "EBR": null,
+       "WBU": null,
+       "WBL": null,
+       "WBT": null,
+       "WBR": null,
+       "NBU": null,
+       "NBL": null,
+       "NBT": null,
+       "NBR": null,
+       "SBU": null,
+       "SBL": null,
+       "SBT": null,
+       "SBR": null
+      }
+     },
+     "phf": {
+      "AM": 0.91,
+      "PM": null
+     },
+     "hv_pct": {
+      "AM": 2.4,
+      "PM": null
+     }
+    }
+   ]
+  },
+  "rolling5_2.pdf": {
+   "vendor_detected": "Sample Counts Co.",
+   "intersections": [
+    {
+     "name": "Demo Rd & Specimen Dr",
+     "am_peak_start": "07:20",
+     "pm_peak_start": null,
+     "volumes": {
+      "AM": {
+       "EBU": 0,
+       "EBL": 186,
+       "EBT": 392,
+       "EBR": 187,
+       "WBU": 0,
+       "WBL": 178,
+       "WBT": 452,
+       "WBR": 214,
+       "NBU": 0,
+       "NBL": 247,
+       "NBT": 1473,
+       "NBR": 105,
+       "SBU": 0,
+       "SBL": 270,
+       "SBT": 591,
+       "SBR": 85
+      },
+      "PM": {
+       "EBU": null,
+       "EBL": null,
+       "EBT": null,
+       "EBR": null,
+       "WBU": null,
+       "WBL": null,
+       "WBT": null,
+       "WBR": null,
+       "NBU": null,
+       "NBL": null,
+       "NBT": null,
+       "NBR": null,
+       "SBU": null,
+       "SBL": null,
+       "SBT": null,
+       "SBR": null
+      }
+     },
+     "phf": {
+      "AM": 0.91,
+      "PM": null
+     },
+     "hv_pct": {
+      "AM": 2.4,
+      "PM": null
+     }
+    }
+   ]
+  }
+ },
+ "network": {
+  "intersections": [
+   {
+    "num": 1,
+    "lat": 32.76,
+    "lng": -117.05
+   },
+   {
+    "num": 2,
+    "lat": 32.760031535,
+    "lng": -117.045121031
+   }
+  ],
+  "feature_count": 37
+ }
+}

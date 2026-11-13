@@ -15,5 +15,16 @@ data/mtc
 # Forecasting: isolated geo-deps virtualenv (geopandas/GDAL — dev/test only)
 backend/.venv-forecasting/
 
+# Third-party / client files never live in the repo (Docs/third-party-files.md).
+# Raw copies are on the owner's disk in THIRD_PARTY_DIR.
+training_data.jsonl
+labels_template.xlsx
+labels_template_OG.xlsx
+model-drop/**
+!model-drop/README.md
+/2035.zip
+backend/tests/forecasting/fixtures/
+third-party-private/
+
 # Capture layer local store (SQLite fallback; production uses DATABASE_URL)
 backend/captures.db

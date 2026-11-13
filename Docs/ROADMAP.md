@@ -29,7 +29,7 @@ transferred". DemandIQ only does volumes and forecasts. LOS, delay and queues be
 ## Rules that hold everywhere
 
 - Code computes every number. AI only reads and suggests, and an engineer accepts or rejects each suggestion.
-- "Learning" = the confirmed-example library (`backend/training_data.jsonl`) plus the correction log
+- "Learning" = the confirmed-example library (synthetic `backend/reference_examples.jsonl` in the repo, the owner's real `training_data.jsonl` in `THIRD_PARTY_DIR`) plus the correction log
   (`backend/capture.py`), never a self-training model. A suite-level agent on the website can use them later
   (trafficiq `docs/AGENT.md`); DemandIQ gets no agent of its own.
 - Guideline checks warn. They never block.
@@ -55,8 +55,8 @@ the price of the cost." Pricing details come later with the financial model.
 
 Order for every file:
 1. **Free reader (code).** Read the text already inside computer-made PDFs, Excel and CSV, with one template
-   per common vendor, and use Docling (MIT licence) for computer-made layouts with no template. No AI, no cost,
-   the same answer every time.
+   per common vendor. No AI, no cost, the same answer every time. (Docling was tried and dropped 2026-11-11: it
+   found no tables on our sheets.) Diagram sheets ask the engineer to confirm left/right turns.
 2. **Checks in code decide if the free read is trustworthy.** The 15-minute rows must add up to the hour,
    approach totals must match their movements, the peak hour must be the busiest four quarters, and the PHF must
    be 0.25–1.0. A scan with no text, or any failed check, sends the file to step 3.
@@ -65,6 +65,9 @@ Order for every file:
 
 Before anything switches, each reader is scored on the same Forger known-answer sheets (text and scanned
 versions) and on the demo PDFs, and the scores come to the owner.
+
+Built (PR #32, 2026-11-11): steps 1-2 and the fallback to today's Claude reader; scores in
+[free-reader.md](free-reader.md).
 
 ## Guided helper (decided 2026-11-11)
 

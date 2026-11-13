@@ -1,6 +1,9 @@
 # Model drop
 
-Put regional travel-model files here (any format) — Hermes picks them up and
+Regional travel-model files are third-party: they do **not** go in git
+(`.gitignore` blocks everything here but this README). Keep them in
+`THIRD_PARTY_DIR/model-drop/` (see `Docs/third-party-files.md`) or a local
+copy of this folder. Put regional travel-model files there (any format) — Hermes picks them up and
 works out what's inside.
 
 **One folder per model**, e.g. `model-drop/caltrans-d11-2019/`. Add a line

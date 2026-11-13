@@ -5,7 +5,7 @@ Batch-processes count files in a folder. For each file:
   1. Runs Claude extraction (count_agent.py) — optionally with an explicit
      --vendor hint so image PDFs get vendor-matched reference examples.
   2. Runs Python verification (count_verifier.py).
-  3. Appends one PRE-FILLED row to a COPY of labels_template.xlsx with
+  3. Appends one PRE-FILLED row to a COPY of labels_template_blank.xlsx with
      confirmed = FALSE on every row (the engineer flips to TRUE on review).
   4. Sets a REVIEW triage flag + cell highlight wherever the verifier
      didn't cleanly VERIFY, so the engineer's eye goes there first.
@@ -30,11 +30,12 @@ try:
 except ImportError:
     sys.exit("Run: pip install openpyxl --break-system-packages")
 
-from count_agent import extract
+from count_agent import extract, THIRD_PARTY_DIR
 from count_verifier import verify
 
-DEFAULT_LABELS = "labels_template.xlsx"
-TEMPLATE       = Path(__file__).parent / "labels_template.xlsx"
+# Real labels name real files — they live outside the repo, in THIRD_PARTY_DIR.
+DEFAULT_LABELS = str(THIRD_PARTY_DIR / "backend" / "tools" / "labels_template.xlsx")
+TEMPLATE       = Path(__file__).parent / "labels_template_blank.xlsx"
 SUPPORTED_EXT  = {'.xlsx', '.xls', '.pdf', '.csv'}
 
 MOVEMENTS = [
@@ -190,6 +191,7 @@ def _prepare_output(output_path):
     if not out.exists():
         if not TEMPLATE.exists():
             sys.exit(f"Template not found: {TEMPLATE}")
+        out.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(TEMPLATE, out)
         print(f"  Created {out.name} from template")
     return load_workbook(output_path)
