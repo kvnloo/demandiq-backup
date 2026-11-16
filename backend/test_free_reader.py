@@ -116,7 +116,9 @@ def test_extract_route_free_then_cloud():
         assert client.get('/health').json()['cloud_reader'].startswith('off')
         r = client.post('/extract', files=[demo, scan])
         assert r.status_code == 200 and r.json()['results'][0]['reader'] == 'free'
-        assert 'ANTHROPIC_API_KEY is not set' in r.json()['errors'][0]['error'] and len(calls) == 1
+        err = r.json()['errors'][0]['error']          # shown to the engineer: no setup talk, a way forward
+        assert 'ANTHROPIC' not in err and 'Render' not in err and 'Bulk paste' in err, err
+        assert len(calls) == 1
     finally:
         app_module.extract, app_module.API_KEY = real_extract, real_key
 
