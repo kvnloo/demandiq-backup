@@ -59,6 +59,10 @@ def ingest_mtc(_path, scenario_year, project_intersections_4326, *, filter_radiu
     """
     import geopandas as gpd
     from pyproj import Transformer
+    from shapely.geometry import LineString, Point
+    from shapely.ops import substring
+
+    from forecasting.matcher import SNAP_TOLERANCE_FT
 
     year = int(scenario_year)
     shp = MTC_DATA_DIR / str(year) / "network_links.shp"
@@ -79,34 +83,53 @@ def ingest_mtc(_path, scenario_year, project_intersections_4326, *, filter_radiu
             max(x for x, _ in xy) + pad, max(y for _, y in xy) + pad)
     gdf = gpd.read_file(shp, bbox=bbox)   # spatial read: only the project area
 
-    def near(c):
-        return any((c[0] - x) ** 2 + (c[1] - y) ** 2 <= r * r for x, y in xy)
-
-    rec = {}   # (A, B) → row; keep links with an endpoint within the radius
+    pts_src = [Point(p) for p in xy]
+    rec = {}   # (A, B) → row; keep links whose LINE passes within the radius (ends can be a mile off)
     for _, row in gdf.iterrows():
         if int(row["FT"]) == DUMMY_FT:
             continue
-        cs = list(row.geometry.coords)
-        if near(cs[0]) or near(cs[-1]):
+        if any(row.geometry.distance(p) <= r for p in pts_src):
             rec[(int(row["A"]), int(row["B"]))] = row
     if not rec:
         raise ValueError(f"ingest_mtc: no MTC road within {filter_radius_ft} ft of the project "
                          "intersections — is the project inside the nine Bay Area counties?")
 
-    links = []
+    # [link_id, from_node, to_node, AB row, BA row, line from→to (metres), share of the link]
+    pieces = []
     for lo, hi in sorted({tuple(sorted(k)) for k in rec}):
         ab, ba = rec.get((lo, hi)), rec.get((hi, lo))
-        geom_row = ab if ab is not None else ba
-        cs = list(geom_row.geometry.coords)
+        line = (ab if ab is not None else ba).geometry
         if ab is None:
-            cs = cs[::-1]            # digitize lo → hi
-        coords = [to_out.transform(x, y) for x, y in cs]
+            line = LineString(list(line.coords)[::-1])   # digitize lo → hi
+        pieces.append([f"{lo}-{hi}", lo, hi, ab, ba, line, 1.0])
+
+    # TM1 has no node at most cross streets, so an intersection can sit mid-link. With no
+    # node within the matcher's snap distance, split the nearest link there; both halves
+    # keep the link's flows. The new node is -(i+1): the same in base and horizon.
+    snap = SNAP_TOLERANCE_FT / FT_PER_M
+    for i, p in enumerate(pts_src):
+        if not pieces or min(Point(c).distance(p) for pc in pieces
+                             for c in (pc[5].coords[0], pc[5].coords[-1])) <= snap:
+            continue
+        k = min(range(len(pieces)), key=lambda j: pieces[j][5].distance(p))
+        lid, a, b, ab, ba, line, share = pieces[k]
+        if line.distance(p) > snap:
+            continue
+        d, v = line.project(p), -(i + 1)
+        pieces[k:k + 1] = [
+            [f"{lid}a", a, v, ab, ba, substring(line, 0, d), share * d / line.length],
+            [f"{lid}b", v, b, ab, ba, substring(line, d, line.length), share * (1 - d / line.length)]]
+
+    links = []
+    for lid, a, b, ab, ba, line, share in pieces:
         either = ab if ab is not None else ba
+        lo, hi = sorted((int(either["A"]), int(either["B"])))   # the model's own nodes, for provenance
+        coords = [to_out.transform(x, y) for x, y in line.coords]
         links.append(NetworkLink(
-            link_id=f"{lo}-{hi}",
-            from_node=lo, to_node=hi,
+            link_id=lid,
+            from_node=a, to_node=b,
             geometry=coords, from_node_xy=coords[0], to_node_xy=coords[-1],
-            length_mi=_f(either["DISTANCE"]) or polyline_length_mi(coords),
+            length_mi=_f(either["DISTANCE"]) * share or polyline_length_mi(coords),
             name=None,
             functional_class=FT_MAP.get(int(either["FT"]), "Other"),
             lanes=int(max(_f(ab["LANES"]) if ab is not None else 0,
