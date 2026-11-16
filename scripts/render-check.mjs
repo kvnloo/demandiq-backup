@@ -57,6 +57,9 @@ const PORT = Number(arg('--port', '9245'))
 // works from anywhere.
 const SEED_ARG = arg('--seed', null)
 const CLICK_TEXT = arg('--click', null)
+// Optional: an overlay that must paint above everything (e.g. a confirm dialog).
+// Fails when an ancestor's z-index caps it below Leaflet's panes/controls (<= 1000).
+const ON_TOP_SEL = arg('--on-top', null)
 
 function resolveSeedPath(p) {
   if (isAbsolute(p)) return existsSync(p) ? p : null
@@ -278,6 +281,22 @@ async function main() {
     if (!state.root) fail(`root selector ${ROOT_SEL} did not render at ${ROUTE}`)
     if (!state.img) fail(`required image ${IMAGE_SEL} is ABSENT — component rendered blank (screenshot: ${shotPath})${state.banner ? ` [banner: ${state.banner}]` : ''}`)
     else if (!(state.img.w > 0)) fail(`required image ${IMAGE_SEL} has zero natural width — blank/broken image (screenshot: ${shotPath})`)
+    if (ON_TOP_SEL) {
+      // The z-index that actually competes with the map is the lowest one set on
+      // the element or any positioned ancestor (each one is a stacking context).
+      const cap = await evaluate(send, `(() => {
+        const el = document.querySelector(${JSON.stringify(ON_TOP_SEL)})
+        if (!el) return null
+        let z = Infinity, by = null
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+          const cs = getComputedStyle(n)
+          if (cs.position !== 'static' && cs.zIndex !== 'auto' && Number(cs.zIndex) < z) { z = Number(cs.zIndex); by = n.className || n.tagName }
+        }
+        return { z: z === Infinity ? null : z, by }
+      })()`)
+      if (!cap) fail(`--on-top element ${ON_TOP_SEL} not found at ${ROUTE}`)
+      else if (cap.z !== null && cap.z <= 1000) fail(`${ON_TOP_SEL} is capped at z-index ${cap.z} by "${cap.by}", so the map (Leaflet panes 400, controls 800-1000) paints over it`)
+    }
     if (consoleErrors.length) fail(`console errors on render:\n  - ${consoleErrors.join('\n  - ')}`)
 
     if (!process.exitCode) {

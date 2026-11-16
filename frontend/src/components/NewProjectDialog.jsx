@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { clearProject, exportProjectFile, getSnapshot } from '../store/projectStore'
 
 const slug = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'project'
@@ -10,7 +11,8 @@ export default function NewProjectDialog({ onCancel }) {
   const name = getSnapshot().project?.name?.trim()
   const download = () => { exportProjectFile(slug(name)); setSaved(true) }
   const startFresh = () => { clearProject(); window.location.assign('/') }
-  return (
+  // Portal to <body>: the TopBar's z-index 5 would otherwise cap the dialog under the map.
+  return createPortal(
     <div className="di-modal-backdrop">
       <div className="di-modal" role="dialog" aria-modal="true" aria-labelledby="di-newproj-title">
         <div className="di-modal__header">
@@ -30,6 +32,7 @@ export default function NewProjectDialog({ onCancel }) {
           <button type="button" className="di-btn-primary" onClick={startFresh}>Delete &amp; start new</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
