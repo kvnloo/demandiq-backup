@@ -81,6 +81,14 @@ scripts/verify-frontend.sh --render --route /export \
   --root .di-s8 --image ".di-s8-corridor-preview__fig img" --click "Preview AM + PM"
 ```
 
+Overlays that must sit above the map (`--on-top` fails if an ancestor's z-index caps it at 1000 or less):
+
+```bash
+# "Start a new project?" dialog over the Results map
+scripts/verify-frontend.sh --render --route /results --root .di-s7 --image ".di-s7-card__img" \
+  --click "New project" --on-top .di-modal-backdrop
+```
+
 If you add a new diagram route, add its invocation here so nobody has to
 rediscover its seed/interaction gating. All four above are proven fail-then-pass:
 breaking the response field read (`png_base64` → `png`) turns each one red.
