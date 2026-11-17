@@ -1,43 +1,13 @@
 // Stage 6 — PNG export for the balance flow map.
 //
 // Renders the live Leaflet map to a 2×-DPI PNG, with:
-//   - tiles temporarily swapped to a light-themed basemap (report-ready)
+//   - the aitt-map basemap as drawn (always the light 'day' style, so already
+//     report-ready; its WebGL canvas keeps preserveDrawingBuffer for this —
+//     see lib/themeTiles.js)
 //   - a title overlay (top-left) and legend overlay (bottom-right)
-//
-// CARTO tile servers do send CORS headers, so html2canvas captures them
-// directly when the TileLayer is created with crossOrigin: 'anonymous'.
-// (See MapView.jsx where the TileLayer is configured.)
 
 import html2canvas from 'html2canvas'
 import { IMBALANCE_COLORS } from './flowMap'
-import { tileUrlForTheme } from './themeTiles'
-
-const LIGHT_TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-
-// Wait for all visible tile <img> elements in the container to fire `load`
-// (or fail) — html2canvas would otherwise capture mid-swap.
-function waitForTilesLoaded(container, timeoutMs = 4000) {
-  return new Promise((resolve) => {
-    const tiles = Array.from(container.querySelectorAll('.leaflet-tile'))
-    const pending = tiles.filter((t) => !t.complete)
-    if (pending.length === 0) return resolve()
-    let remaining = pending.length
-    const done = () => { remaining -= 1; if (remaining <= 0) finish() }
-    const finish = () => {
-      pending.forEach((t) => {
-        t.removeEventListener('load', done)
-        t.removeEventListener('error', done)
-      })
-      clearTimeout(t0)
-      resolve()
-    }
-    pending.forEach((t) => {
-      t.addEventListener('load', done, { once: true })
-      t.addEventListener('error', done, { once: true })
-    })
-    const t0 = setTimeout(finish, timeoutMs)
-  })
-}
 
 // Inject a temporary title + legend overlay into the map container. The
 // overlay is removed after capture so it doesn't persist in the live UI.
@@ -87,27 +57,18 @@ function injectOverlays({ container, title, viewType, method, dateStr }) {
   }
 }
 
-// Public: swap to light tiles, wait for them to load, capture at 2×,
-// restore the active theme's tiles, trigger download. The TileLayer ref is passed in
-// from MapView so we don't have to reach into Leaflet internals here.
+// Public: capture at 2×, trigger download.
 //
 // Args:
-//   tileLayer: the L.TileLayer instance (so we can change its URL template)
 //   container: the .leaflet-container DOM element
 //   meta:      { projectName, viewType ('Pre' | 'Post'), method, date }
 //
 // Caller is responsible for re-entering nothing during capture.
-export async function exportFlowMapPNG({ tileLayer, container, meta }) {
-  if (!tileLayer || !container) {
-    throw new Error('exportFlowMapPNG: tileLayer and container are required')
+export async function exportFlowMapPNG({ container, meta }) {
+  if (!container) {
+    throw new Error('exportFlowMapPNG: container is required')
   }
-  // 1. Swap to light tiles
-  tileLayer.setUrl(LIGHT_TILE_URL)
-  await waitForTilesLoaded(container)
-  // small extra frame so any in-progress paints settle
-  await new Promise((r) => requestAnimationFrame(r))
-
-  // 2. Inject overlays
+  // 1. Inject overlays
   const dateStr = new Date(meta.date || Date.now()).toLocaleString()
   const removeOverlays = injectOverlays({
     container,
@@ -118,15 +79,30 @@ export async function exportFlowMapPNG({ tileLayer, container, meta }) {
   })
 
   try {
-    // 3. Capture at 2× DPI
+    // 2. Capture at 2× DPI
     const canvas = await html2canvas(container, {
       useCORS: true,
       allowTaint: false,
       backgroundColor: '#FFFFFF',
       scale: 2,
       logging: false,
+      // html2canvas 1.4 throws on the color-mix() attribution background
+      // (shell.css), which killed every export; keep the OSM credit, plain white.
+      // It also ignores the Leaflet SVG renderer's translate3d and viewBox
+      // origin, so the flow bands land off the streets: bake the offset into
+      // the clone's <g> instead.
+      onclone: (doc) => {
+        doc.querySelectorAll('.leaflet-control-attribution')
+          .forEach((el) => el.style.setProperty('background', 'rgba(255,255,255,0.8)', 'important'))
+        doc.querySelectorAll('.leaflet-overlay-pane svg[viewBox]').forEach((svg) => {
+          const [x, y, w, h] = svg.getAttribute('viewBox').split(' ').map(Number)
+          svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+          svg.style.transform = 'none'
+          svg.querySelectorAll(':scope > g').forEach((g) => g.setAttribute('transform', `translate(${-x} ${-y})`))
+        })
+      },
     })
-    // 4. Trigger download
+    // 3. Trigger download
     const safe = (s) => String(s || '').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '')
     const stamp = new Date().toISOString().slice(0, 10)
     const filename = `${safe(meta.projectName) || 'project'}_${safe(meta.viewType) || 'flow'}_flow_map_${stamp}.png`
@@ -145,11 +121,7 @@ export async function exportFlowMapPNG({ tileLayer, container, meta }) {
       }, 'image/png')
     })
   } finally {
-    // 5. Always restore the live map's theme tiles + remove overlays.
-    // Restore to whatever the active palette wants (Voyager / Positron), NOT a
-    // hardcoded dark template — otherwise exporting on Sunshine would leave the
-    // live map showing dark tiles until the next theme change.
+    // 4. Always remove the overlays.
     removeOverlays()
-    tileLayer.setUrl(tileUrlForTheme())
   }
 }

@@ -5,8 +5,8 @@
 // This is ONE preference for the whole app, not per-project, so it lives in its
 // own localStorage key (separate from 'demandiq:project') and is applied as the
 // data-theme attribute on the documentElement. themes.css gates the palette on
-// that attribute; MapView's MutationObserver swaps basemap tiles to match
-// (see lib/themeTiles.js).
+// that attribute. The basemap does NOT follow it: every map uses the light
+// aitt-map 'day' style (see lib/themeTiles.js).
 
 export const THEME_STORAGE_KEY = 'demandiq:theme'
 export const DEFAULT_THEME = 'signal-flow'

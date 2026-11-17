@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import { MapContainer, TileLayer, ZoomControl, useMap } from 'react-leaflet'
+import { useEffect, useRef } from 'react'
+import { MapContainer, ZoomControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { TILE_ATTR, TILE_MAX_NATIVE_ZOOM, currentTheme, tileUrlForTheme } from '../lib/themeTiles'
+import { AittBasemap } from '../lib/themeTiles'
 
 // Match-review map: project intersection pins + the matched SANDAG network links,
 // colored by leg status. Reuses the app's leaflet/tile/pin infrastructure but
@@ -93,13 +93,6 @@ function MatchLayers({ intersections, matches, layer, activeNum, onPickIntersect
 }
 
 export default function ForecastMatchMap({ intersections, matches, layer, activeNum, onPickIntersection }) {
-  const [theme, setTheme] = useState(currentTheme)
-  useEffect(() => {
-    const obs = new MutationObserver(() => setTheme(currentTheme()))
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => obs.disconnect()
-  }, [])
-
   return (
     <MapContainer
       center={[32.72, -117.1]}
@@ -107,12 +100,7 @@ export default function ForecastMatchMap({ intersections, matches, layer, active
       zoomControl={false}
       style={{ width: '100%', height: '100%' }}
     >
-      <TileLayer
-        url={tileUrlForTheme(theme)}
-        attribution={TILE_ATTR}
-        maxNativeZoom={TILE_MAX_NATIVE_ZOOM}
-        crossOrigin="anonymous"
-      />
+      <AittBasemap />
       <ZoomControl position="bottomright" />
       <MatchLayers
         intersections={intersections}

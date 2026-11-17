@@ -144,7 +144,6 @@ export default function S7_ReviewDrops() {
   const [showDirLabels, setShowDirLabels] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [flowPopup, setFlowPopup] = useState(null)    // { id, x, y }
-  const tileLayerRef = useRef(null)
   const mapWrapperRef = useRef(null)
   const staleness = useMemo(
     () => lastRunStaleness(lastRun, links, intersections),
@@ -277,12 +276,11 @@ export default function S7_ReviewDrops() {
   }
 
   const handleExportPNG = async () => {
-    if (!tileLayerRef.current || !mapWrapperRef.current) return
+    if (!mapWrapperRef.current) return
     setExporting(true)
     try {
       const container = mapWrapperRef.current.querySelector('.leaflet-container')
       await exportFlowMapPNG({
-        tileLayer: tileLayerRef.current,
         container,
         meta: {
           projectName: project.name || 'project',
@@ -388,7 +386,6 @@ export default function S7_ReviewDrops() {
           showDirLabels={showDirLabels}
           lastRun={lastRun}
           overrides={overrides}
-          onTileLayerReady={(tl) => { tileLayerRef.current = tl }}
         />
 
         {flowPopup && (
