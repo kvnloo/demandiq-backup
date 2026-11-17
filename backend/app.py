@@ -62,10 +62,10 @@ from forecasting.api import router as forecasting_router
 # ── Config ────────────────────────────────────────────────────────────────────
 API_KEY = os.getenv("ANTHROPIC_API_KEY")
 # Without a key the free code reader still works; files it hands off get this error.
+# Shown to the engineer, so no setup talk: the missing key is logged at startup.
 NO_KEY_ERROR = (
-    "ANTHROPIC_API_KEY is not set. On Render: open the service's Environment "
-    "tab, add ANTHROPIC_API_KEY, and redeploy. Locally: export it in your shell "
-    "(e.g. ~/.bash_profile) and restart."
+    "DemandIQ can't read this count sheet layout yet. Type the peak-hour counts in, "
+    "or copy them from the sheet and use Bulk paste from spreadsheet."
 )
 if not API_KEY:
     # Not fatal: the free reader works without it. Loud, so a deploy with a forgotten key is caught.
@@ -325,7 +325,8 @@ def extract_endpoint(files: list[UploadFile] = File(...)):
                 data.update(reader="free", reader_reason=why)
                 model = "free-reader"
             elif not API_KEY:
-                raise ValueError(f"The free reader could not read this file ({why}). {NO_KEY_ERROR}")
+                logging.getLogger("demandiq").info("free reader could not read %s: %s", name, why)
+                raise ValueError(NO_KEY_ERROR)
             else:
                 data = extract(tmp_path, API_KEY)
                 data.update(reader="cloud", reader_reason=f"free reader: {why}")

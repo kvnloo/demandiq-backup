@@ -84,7 +84,7 @@ and it costs ~550 MB (torch). The owner dropped it on 2026-11-11.
    without 15-min rows to the cloud.
 2. **DECIDED: keep starting without the key, with a loud warning.** The server logs "cloud reader is OFF" at
    startup and `/health` reports `cloud_reader`. Was: **Missing key no longer stops the app.** `app.py` used to refuse to start without `ANTHROPIC_API_KEY`. Now it
-   starts, the free reader works, and only the files it hands off get the existing "ANTHROPIC_API_KEY is not set"
+   starts, the free reader works, and only the files it hands off get a plain "can't read this layout yet; type it or use Bulk paste"
    error. The downside: a deploy with a forgotten key isn't caught at startup.
 3. **DECIDED: Docling dropped.** Was: **Keep Docling?** It found nothing on our sheets and costs ~550 MB. Keep it optional, add it to the image, or
    remove it. A real vendor PDF where pdfplumber fails would settle this. The repo has none.
