@@ -28,6 +28,7 @@ import {
   isResultsStale,
   isExistingAnalysisDone,
   projectFileError,
+  applyExtractedVolumes,
 } from './projectStore.js'
 
 let passed = 0, failed = 0
@@ -315,6 +316,16 @@ ok(!canRedo(), 'history: new action clears the redo stack')
   ok(projectFileError({ intersections: [{ id: 'a', num: 1 }, { id: 'a', num: 2 }] }), 'file: duplicate ids → refused')
   ok(projectFileError({ intersections: [{ id: 'a', num: 1, volumes: { AM: { EBT: { value: -5 } } } }] }), 'file: negative count → refused')
   ok(projectFileError({ project: { name: 'X' }, intersections: [{ id: 'a', num: 1, volumes: { AM: { EBT: { value: 5 } } } }], links: [] }) === null, 'file: valid project → accepted')
+}
+
+// ── Extracted counts keep which reader made them (only the cloud reader is "AI") ──
+{
+  saveProject({ intersections: [{ id: 'a', num: 1 }, { id: 'b', num: 2 }], links: [] })
+  applyExtractedVolumes('a', { reader: 'free', volumes: { AM: { EBT: 100 } } })
+  applyExtractedVolumes('b', { reader: 'cloud', volumes: { AM: { EBT: 90 } } })
+  const [a, b] = getSnapshot().intersections
+  ok(a.volumes.AM.EBT._source === 'code', `extract: free reader → _source 'code', got ${a.volumes.AM.EBT._source}`)
+  ok(b.volumes.AM.EBT._source === 'agent', `extract: cloud reader → _source 'agent', got ${b.volumes.AM.EBT._source}`)
 }
 
 console.log(`\n${'='.repeat(46)}\n  ${passed} passed, ${failed} failed`)

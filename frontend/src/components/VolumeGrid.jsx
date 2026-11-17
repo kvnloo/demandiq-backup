@@ -18,7 +18,7 @@ export function activeMovements(approach) {
   return out
 }
 
-// One AM-or-PM volume input cell (number, with source colouring + AI badge).
+// One AM-or-PM volume input cell (number, with source colouring; AI badge only for cloud-read values).
 // A typed value that is not a valid count (negative, decimal, > MAX_VOLUME) is
 // held only in the cell with an inline message — the store keeps its last good
 // value, so a typo can never reach balancing or an export.
@@ -27,7 +27,7 @@ function VolCell({ cell, onChange, onPaste }) {
   const source = cell?._source
   const value = cell?.value
   const cls =
-    source === 'agent'  ? 'di-vol-td--agent'  :
+    source === 'agent' || source === 'code' ? 'di-vol-td--agent' :
     source === 'manual' ? 'di-vol-td--manual' : ''
   return (
     <td className={`di-vol-td di-vol-td--cell ${cls}${bad ? ' di-vol-td--bad' : ''}`}>

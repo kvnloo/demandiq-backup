@@ -138,6 +138,7 @@ export default function S4_VolumeEntry() {
             ...inter,
             sourceFile: result.source_file,
             vendorDetected: result.vendor_detected,
+            reader: result.reader,
           })
         }
         if (Array.isArray(result.warnings)) {

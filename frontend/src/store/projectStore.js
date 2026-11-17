@@ -612,14 +612,16 @@ export function setDiagramNote(intersectionId, note) {
 }
 
 // Apply one agent-extracted intersection block (from the /api/extract response)
-// to a project intersection. Wraps every numeric value as { value, _source: 'agent' }.
+// to a project intersection. Wraps every numeric value as { value, _source }:
+// 'code' when the free code reader read it, 'agent' (AI) when the cloud reader did.
 export function applyExtractedVolumes(intersectionId, payload) {
+  const source = payload.reader === 'free' ? 'code' : 'agent'
   const wrap = (raw) => {
     const out = {}
     if (!raw) return out
     for (const [mvt, val] of Object.entries(raw)) {
       if (val !== null && val !== undefined) {
-        out[mvt] = { value: val, _source: 'agent' }
+        out[mvt] = { value: val, _source: source }
       }
     }
     return out
