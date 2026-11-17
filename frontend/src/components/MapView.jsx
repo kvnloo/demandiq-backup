@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { MapContainer, TileLayer, ZoomControl, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, ZoomControl, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { Search, X, Loader2 } from 'lucide-react'
 import { searchPhoton } from '../lib/photon'
 import { buildLinkFlows, fmtPair } from '../lib/flowMap'
-import { TILE_ATTR, TILE_MAX_NATIVE_ZOOM, currentTheme, tileUrlForTheme } from '../lib/themeTiles'
+import { AittBasemap } from '../lib/themeTiles'
 
 // Zoom thresholds for flow-label visibility (spec §6.7)
 const FLOW_LABEL_FADE_ZOOM = 13
@@ -362,20 +362,6 @@ function FlowLabels({
   return null
 }
 
-// Expose the L.TileLayer instance up to the parent so the PNG export
-// helper can call setUrl() to swap dark → light tiles for the capture.
-function TileLayerHandle({ onReady }) {
-  const map = useMap()
-  useEffect(() => {
-    let tileLayer = null
-    map.eachLayer((layer) => {
-      if (layer instanceof L.TileLayer) tileLayer = layer
-    })
-    if (tileLayer && onReady) onReady(tileLayer)
-  }, [map, onReady])
-  return null
-}
-
 // ── Floating Photon search ────────────────────────────────────────────
 function SearchBar() {
   const map = useMap()
@@ -498,21 +484,7 @@ export default function MapView({
   showDirLabels = false,
   lastRun = null,
   overrides = { AM: {}, PM: {} },
-  onTileLayerReady,                  // (L.TileLayer) => void
 }) {
-  // Basemap follows the active palette. The S1 picker sets data-theme on the
-  // documentElement; a MutationObserver mirrors that into React state so the
-  // TileLayer's url prop changes — react-leaflet calls setUrl() on the SAME
-  // layer instance (no remove/add, no page reload), which keeps the instance
-  // reference S7 hands to the PNG exporter valid across theme switches.
-  const [theme, setTheme] = useState(currentTheme)
-  useEffect(() => {
-    const root = document.documentElement
-    const obs = new MutationObserver(() => setTheme(currentTheme()))
-    obs.observe(root, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => obs.disconnect()
-  }, [])
-  const tileUrl = tileUrlForTheme(theme)
 
   return (
     <MapContainer
@@ -523,13 +495,7 @@ export default function MapView({
       zoomControl={false}
       style={{ width: '100%', height: '100%' }}
     >
-      <TileLayer
-        url={tileUrl}
-        attribution={TILE_ATTR}
-        maxNativeZoom={TILE_MAX_NATIVE_ZOOM}
-        crossOrigin="anonymous"
-      />
-      <TileLayerHandle onReady={onTileLayerReady} />
+      <AittBasemap />
       <ZoomControl position="bottomright" />
       <ClickHandler onClick={onMapClick} />
       <LinkLayers

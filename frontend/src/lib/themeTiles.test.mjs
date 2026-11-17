@@ -1,54 +1,39 @@
-// tileUrlForTheme tests — pure ESM, no runner:
+// Basemap contract tests — pure ESM, no runner:
 //   node frontend/src/lib/themeTiles.test.mjs
 //
-// Locks the basemap contract: light themes get Esri's Light Gray Canvas,
-// everything else (incl. the no-attribute / signal-flow default) gets Dark
-// Gray Canvas. A tile-template edit or a typo'd theme name would otherwise
-// regress the basemap silently — the failure mode is a map that still renders,
-// just wrong, which no screenshot review reliably catches.
+// themeTiles.js pulls in maplibre-gl, React and CSS, which node can't load, so
+// this reads the source as text. Locks: the light 'day' aitt-map style, tiles
+// from the aitt-map host, and no Esri/ArcGIS basemap left anywhere in src.
 
-import { tileUrlForTheme, TILE_MAX_NATIVE_ZOOM } from './themeTiles.js'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 let passed = 0, failed = 0
 function ok(cond, msg) {
   if (cond) { passed++ } else { failed++; console.error('  FAIL:', msg) }
 }
 
-const DARK  = 'World_Dark_Gray_Base'
-const LIGHT = 'World_Light_Gray_Base'
+const here = dirname(fileURLToPath(import.meta.url))
+const src = readFileSync(join(here, 'themeTiles.js'), 'utf8')
 
-// ── Light themes → Light Gray Canvas ─────────────────────────────────────
-for (const t of ['signal-flow-day']) {
-  ok(tileUrlForTheme(t).includes(LIGHT), `${t} → light canvas`)
-  ok(!tileUrlForTheme(t).includes(DARK), `${t} is not the dark canvas`)
+ok(/buildStyle\([^)]*'day'/.test(src), "basemap uses the 'day' style")
+ok(!/'night'|"night"/.test(src), 'no night style')
+ok(src.includes("'https://tiles.aitransportationtools.com'"), 'tiles come from the aitt-map host')
+ok(/BASEMAP_URL = `\$\{TILES\}\/basemap\/[^`]+\.pmtiles`/.test(src), 'basemap is a pmtiles file on the tiles host')
+ok(src.includes('preserveDrawingBuffer: true'), 'WebGL buffer kept for the flow-map PNG export')
+
+function walk(dir) {
+  return readdirSync(dir).flatMap((f) => {
+    const p = join(dir, f)
+    return statSync(p).isDirectory() ? walk(p) : [p]
+  })
 }
-
-// ── Dark themes → Dark Gray Canvas ───────────────────────────────────────
-for (const t of ['signal-flow']) {
-  ok(tileUrlForTheme(t).includes(DARK), `${t} → dark canvas`)
-  ok(!tileUrlForTheme(t).includes(LIGHT), `${t} is not the light canvas`)
+const self = fileURLToPath(import.meta.url)
+for (const f of walk(join(here, '..'))) {
+  if (f === self || !/\.(jsx?|mjs|css)$/.test(f)) continue
+  ok(!/esri|arcgis/i.test(readFileSync(f, 'utf8')), `no Esri/ArcGIS in ${f}`)
 }
-
-// ── Default / unknown / empty fall back to dark (never a blank map) ──────
-ok(tileUrlForTheme('').includes(DARK), 'empty string → dark canvas')
-ok(tileUrlForTheme('totally-unknown').includes(DARK), 'unknown theme → dark canvas')
-
-// ── Esri path order is {z}/{y}/{x}, NOT the usual {z}/{x}/{y} ────────────
-// Swapping x and y yields a map that renders perfectly and shows the wrong
-// place, so assert the order rather than mere presence.
-for (const t of ['signal-flow-day', 'signal-flow']) {
-  const u = tileUrlForTheme(t)
-  ok(u.endsWith('/{z}/{y}/{x}'), `${t} url uses Esri's z/y/x order`)
-  // Esri serves no subdomains and no retina variant; leaving either placeholder
-  // in would request a host that does not resolve.
-  ok(!u.includes('{s}'), `${t} url has no {s} subdomain placeholder`)
-  ok(!u.includes('{r}'), `${t} url has no {r} retina placeholder`)
-}
-
-// ── Gray Canvas has no imagery above z16 ─────────────────────────────────
-// Above it Esri answers 200 with a 2.5 KB "Map data not yet available" image,
-// so without this cap an intersection-level zoom paints that placeholder.
-ok(TILE_MAX_NATIVE_ZOOM === 16, 'maxNativeZoom caps at Esri Gray Canvas data limit')
 
 console.log(`themeTiles: ${passed} passed, ${failed} failed`)
-if (failed > 0) process.exit(1)
+if (failed) process.exit(1)
